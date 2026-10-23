@@ -5,11 +5,11 @@
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js",
-    "seed": "node utils/seeder.js",
-    "test:email": "node utils/testBrevo.js",
-    "test:auth": "node test_jwt_auth.js"
+    "start": "node src/server.js",
+    "dev": "node src/server.js",
+    "seed": "node src/utils/seeder.js",
+    "test:email": "node src/utils/testBrevo.js",
+    "test:auth": "node src/test_jwt_auth.js"
   },
   "dependencies": {
     "@getbrevo/brevo": "^6.2.0",
