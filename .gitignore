@@ -1,0 +1,119 @@
+# .env
+# .env.*
+# node_modules/
+# dist/
+# *.log
+
+
+# ==========================================
+# Dependencies
+# ==========================================
+node_modules/
+
+# ==========================================
+# Environment variables and secrets
+# ==========================================
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+
+# ==========================================
+# Logs
+# ==========================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ==========================================
+# Build output
+# ==========================================
+dist/
+build/
+out/
+lib/
+coverage/
+.nyc_output/
+
+# ==========================================
+# TypeScript
+# ==========================================
+*.tsbuildinfo
+
+# ==========================================
+# Testing
+# ==========================================
+coverage/
+test-results/
+playwright-report/
+
+# ==========================================
+# Runtime files
+# ==========================================
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# ==========================================
+# Cache and temporary files
+# ==========================================
+.cache/
+.npm/
+.eslintcache
+.tmp/
+temp/
+tmp/
+
+# ==========================================
+# Framework-specific
+# ==========================================
+.next/
+.nuxt/
+.nest/
+.turbo/
+.vercel/
+.netlify/
+
+# ==========================================
+# OS files
+# ==========================================
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ==========================================
+# IDE and editors
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ==========================================
+# Local database files and backups
+# ==========================================
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.bak
+*.backup
+
+# ==========================================
+# Package manager files
+# ==========================================
+.pnpm-store/
+
+# ==========================================
+# Optional local configuration
+# ==========================================
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
