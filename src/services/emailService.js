@@ -18,24 +18,73 @@ const formatCurrency = (amount) => {
 };
 
 /**
- * Resolves watch images to valid absolute URLs for email clients.
- * Cloudinary URLs (https://...) are preserved.
- * Relative paths (/images/...) are prefixed with backend base URL.
+ * Cloudinary Delivery URLs for all 13 TICKING Luxury Watch Assets
  */
-const resolveImageUrl = (imgUrl) => {
-  if (!imgUrl) {
-    return 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80';
+const CLOUDINARY_IMAGE_MAP = {
+  datejust: 'https://res.cloudinary.com/bjaodxyt/image/upload/v1792843446/datejust.jpg',
+  daytona: 'https://res.cloudinary.com/bjaodxyt/image/upload/v1792843442/daytona.jpg',
+  submariner: 'https://res.cloudinary.com/bjaodxyt/image/upload/v1792843445/submariner.jpg',
+  nautilus: 'https://res.cloudinary.com/bjaodxyt/image/upload/v1792843442/nautilus.jpg',
+  overseas: 'https://res.cloudinary.com/bjaodxyt/image/upload/v1792843444/overseas.jpg',
+  santos: 'https://res.cloudinary.com/bjaodxyt/image/upload/v1792843444/santos.jpg',
+  speedmaster: 'https://res.cloudinary.com/bjaodxyt/image/upload/v1792843444/speedmaster.jpg',
+  navitimer: 'https://res.cloudinary.com/bjaodxyt/image/upload/v1792843443/navitimer.jpg',
+  lange_1815: 'https://res.cloudinary.com/bjaodxyt/image/upload/v1792843442/lange_1815.jpg',
+  ap_diver: 'https://res.cloudinary.com/bjaodxyt/image/upload/v1792843446/ap_diver.jpg',
+  hero_chronograph: 'https://res.cloudinary.com/bjaodxyt/image/upload/v1792843442/hero_chronograph.jpg',
+  movement_craft: 'https://res.cloudinary.com/bjaodxyt/image/upload/v1792843443/movement_craft.jpg',
+  tag_connected: 'https://res.cloudinary.com/bjaodxyt/image/upload/v1792843445/tag_connected.jpg'
+};
+
+/**
+ * Resolves watch images to valid, accessible HTTPS Cloudinary URLs for email clients.
+ * - Always delivers complete, publicly accessible HTTPS URLs.
+ * - Intelligently matches direct Cloudinary links, local filenames, or watch model names.
+ * - Never returns broken localhost or relative URLs.
+ * - Luxury fallback guaranteed.
+ */
+const resolveImageUrl = (imgUrl, watchName = '') => {
+  if (imgUrl && typeof imgUrl === 'string') {
+    const trimmed = imgUrl.trim();
+
+    // If already a valid public Cloudinary HTTPS delivery URL
+    if (trimmed.startsWith('https://res.cloudinary.com/')) {
+      return trimmed;
+    }
+
+    // Check if filename contains any key in CLOUDINARY_IMAGE_MAP
+    const lower = trimmed.toLowerCase();
+    for (const [key, cUrl] of Object.entries(CLOUDINARY_IMAGE_MAP)) {
+      if (lower.includes(key)) {
+        return cUrl;
+      }
+    }
+
+    // If any other valid public HTTPS URL (excluding localhost / 127.0.0.1)
+    if (trimmed.startsWith('https://') && !trimmed.includes('localhost') && !trimmed.includes('127.0.0.1')) {
+      return trimmed;
+    }
   }
-  if (imgUrl.startsWith('http://') || imgUrl.startsWith('https://')) {
-    return imgUrl;
+
+  // Fallback: match by watch model name if available
+  if (watchName && typeof watchName === 'string') {
+    const nameLower = watchName.toLowerCase();
+    if (nameLower.includes('datejust')) return CLOUDINARY_IMAGE_MAP.datejust;
+    if (nameLower.includes('daytona')) return CLOUDINARY_IMAGE_MAP.daytona;
+    if (nameLower.includes('submariner')) return CLOUDINARY_IMAGE_MAP.submariner;
+    if (nameLower.includes('nautilus')) return CLOUDINARY_IMAGE_MAP.nautilus;
+    if (nameLower.includes('overseas')) return CLOUDINARY_IMAGE_MAP.overseas;
+    if (nameLower.includes('santos')) return CLOUDINARY_IMAGE_MAP.santos;
+    if (nameLower.includes('speedmaster') || nameLower.includes('moonwatch')) return CLOUDINARY_IMAGE_MAP.speedmaster;
+    if (nameLower.includes('navitimer')) return CLOUDINARY_IMAGE_MAP.navitimer;
+    if (nameLower.includes('1815') || nameLower.includes('lange')) return CLOUDINARY_IMAGE_MAP.lange_1815;
+    if (nameLower.includes('diver') || nameLower.includes('offshore') || nameLower.includes('royal oak')) return CLOUDINARY_IMAGE_MAP.ap_diver;
+    if (nameLower.includes('portugieser') || nameLower.includes('iwc')) return CLOUDINARY_IMAGE_MAP.hero_chronograph;
+    if (nameLower.includes('connected') || nameLower.includes('tag')) return CLOUDINARY_IMAGE_MAP.tag_connected;
   }
-  const backendBase = (
-    process.env.BACKEND_URL ||
-    process.env.BASE_URL ||
-    'http://localhost:5000'
-  ).replace(/\/+$/, '');
-  const cleanPath = imgUrl.startsWith('/') ? imgUrl : `/${imgUrl}`;
-  return `${backendBase}${cleanPath}`;
+
+  // Safe default: luxury hero chronograph photo on Cloudinary
+  return CLOUDINARY_IMAGE_MAP.hero_chronograph;
 };
 
 /**
@@ -289,19 +338,15 @@ const generateOrderConfirmationHtml = (order, user = {}, settings = {}) => {
   const paymentStatusText = isCod ? 'Pay on Delivery (Pending)' : 'Paid (Confirmed & Verified)';
   const transactionId = order.paymentId || order.trackingNumber || orderNumber;
 
-  // Build rows for each watch in the order
+  // Build rows for each watch in the order (clean luxury typography without product images)
   const itemsHtml = (order.items || [])
     .map((item) => {
-      const imgUrl = resolveImageUrl(item.image);
       const itemSubtotal = (Number(item.price) || 0) * (Number(item.quantity) || 1);
       return `
         <tr>
           <td style="padding: 16px 0; border-bottom: 1px solid #1C1C24;">
             <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0">
               <tr>
-                <td width="72" valign="top" style="padding-right: 14px;">
-                  <img src="${imgUrl}" alt="${item.name}" width="68" height="68" style="width: 68px; height: 68px; object-fit: cover; border-radius: 8px; border: 1px solid #2A261A; background-color: #000000; display: block;" />
-                </td>
                 <td valign="top" style="text-align: left;">
                   <div style="font-size: 10px; font-weight: 700; color: #D4AF37; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 4px;">
                     ${item.brand || 'Luxury Manufacture'}
@@ -313,7 +358,7 @@ const generateOrderConfirmationHtml = (order, user = {}, settings = {}) => {
                     Qty: <strong style="color: #E5E5E5;">${item.quantity}</strong> &times; ${formatCurrency(item.price)}
                   </div>
                 </td>
-                <td width="110" valign="top" style="text-align: right;">
+                <td width="120" valign="top" style="text-align: right;">
                   <div style="font-family: Georgia, serif; font-size: 14px; font-weight: 700; color: #F3E5AB;">
                     ${formatCurrency(itemSubtotal)}
                   </div>
@@ -539,7 +584,7 @@ const generateOrderConfirmationHtml = (order, user = {}, settings = {}) => {
               <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 26px;">
                 <tr>
                   <td align="center">
-                    <a href="http://localhost:3000/orders/${order._id || order.orderId}" target="_blank" style="display: inline-block; background: linear-gradient(90deg, #D4AF37 0%, #B8860B 100%); color: #000000; font-size: 12px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; text-decoration: none; padding: 15px 34px; border-radius: 50px; box-shadow: 0 4px 18px rgba(212, 175, 55, 0.35);">
+                    <a href="${(process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:3000').replace(/\/+$/, '')}/orders/${order._id || order.orderId}" target="_blank" style="display: inline-block; background: linear-gradient(90deg, #D4AF37 0%, #B8860B 100%); color: #000000; font-size: 12px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; text-decoration: none; padding: 15px 34px; border-radius: 50px; box-shadow: 0 4px 18px rgba(212, 175, 55, 0.35);">
                       VIEW ORDER IN YOUR VAULT &rarr;
                     </a>
                   </td>
@@ -893,11 +938,277 @@ const sendOrderConfirmationEmail = async ({ order, user }) => {
   }
 };
 
+/**
+ * Generates a luxury black-and-gold responsive HTML account deleted email for TICKING
+ */
+const generateAccountDeletedHtml = (name, email, deletionDate, settings = {}) => {
+  const { storeName, supportEmail: conciergeEmail, phone: boutiquePhone } = getSafeSettings(settings);
+  const firstName = (name || '').trim().split(' ')[0] || 'Collector';
+  const currentYear = new Date().getFullYear();
+  const formattedDate = formatOrderDate(deletionDate || new Date());
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account Deleted Successfully | ${storeName}</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #08080A;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      color: #E5E5E5;
+      -webkit-font-smoothing: antialiased;
+    }
+    table {
+      border-collapse: collapse;
+    }
+    a {
+      color: #D4AF37;
+      text-decoration: none;
+    }
+    @media only screen and (max-width: 600px) {
+      .container {
+        width: 100% !important;
+        padding: 10px !important;
+      }
+      .content-padding {
+        padding: 25px 20px !important;
+      }
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #08080A; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #E5E5E5;">
+  <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color: #08080A; padding: 40px 15px;">
+    <tr>
+      <td align="center">
+        <!-- Main Container -->
+        <table role="presentation" class="container" width="100%" border="0" cellpadding="0" cellspacing="0" style="max-width: 600px; background-color: #0F0F13; border: 1px solid #2A261A; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.85);">
+          <!-- Top Gold Accent Line -->
+          <tr>
+            <td style="height: 4px; background: linear-gradient(90deg, #996515 0%, #D4AF37 50%, #F3E5AB 100%);"></td>
+          </tr>
+
+          <!-- Header / Brand Emblem -->
+          <tr>
+            <td align="center" style="padding: 38px 30px 24px 30px; border-bottom: 1px solid #1C1C24;">
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <div style="display: inline-block; width: 44px; height: 44px; line-height: 44px; border: 1.5px solid #D4AF37; background: #000000; text-align: center; margin-bottom: 12px;">
+                      <span style="font-family: Georgia, serif; font-size: 22px; font-weight: bold; color: #D4AF37; letter-spacing: 2px;">T</span>
+                    </div>
+                    <div style="font-family: Georgia, serif; font-size: 22px; font-weight: 700; letter-spacing: 0.35em; color: #F3E5AB; text-transform: uppercase;">
+                      T I C K I N G
+                    </div>
+                    <div style="font-size: 9px; letter-spacing: 0.3em; color: #8A8A93; text-transform: uppercase; margin-top: 5px;">
+                      Haute Horlogerie &bull; Swiss Craftsmanship
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Main Body Content -->
+          <tr>
+            <td class="content-padding" style="padding: 36px 36px 24px 36px; text-align: left;">
+              <!-- Status Pill -->
+              <div style="display: inline-block; padding: 4px 12px; background-color: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 20px; font-size: 10px; font-weight: 700; letter-spacing: 0.2em; color: #F87171; text-transform: uppercase; margin-bottom: 14px;">
+                CONFIRMATION OF ACCOUNT DELETION
+              </div>
+
+              <h1 style="font-family: Georgia, serif; font-size: 24px; line-height: 1.35; font-weight: 700; color: #FFFFFF; margin: 0 0 16px 0;">
+                Account Deleted Successfully
+              </h1>
+
+              <p style="font-size: 14px; line-height: 1.7; color: #C4C4CC; margin: 0 0 16px 0;">
+                Dear ${firstName},
+              </p>
+
+              <p style="font-size: 14px; line-height: 1.7; color: #C4C4CC; margin: 0 0 20px 0;">
+                We are writing to confirm that your <strong>${storeName}</strong> client account has been permanently deleted from our system as per your request.
+              </p>
+
+              <!-- Deletion Details Card -->
+              <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color: #14141A; border: 1px solid #262633; border-radius: 12px; margin-bottom: 24px;">
+                <tr>
+                  <td style="padding: 20px 24px;">
+                    <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.2em; color: #D4AF37; text-transform: uppercase; margin-bottom: 12px; border-bottom: 1px solid #1F1F2A; padding-bottom: 8px;">
+                      Account Deletion Details
+                    </div>
+                    <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="padding: 6px 0; font-size: 13px; color: #8A8A93;">Account Email:</td>
+                        <td style="padding: 6px 0; font-size: 13px; color: #FFFFFF; text-align: right; font-weight: 600;">${email}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 6px 0; font-size: 13px; color: #8A8A93;">Deletion Date:</td>
+                        <td style="padding: 6px 0; font-size: 13px; color: #FFFFFF; text-align: right; font-weight: 600;">${formattedDate}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 6px 0; font-size: 13px; color: #8A8A93;">Account Status:</td>
+                        <td style="padding: 6px 0; font-size: 13px; color: #F87171; text-align: right; font-weight: 600;">Permanently Deleted</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Explanation Notice -->
+              <div style="background-color: #101016; border-left: 3px solid #D4AF37; padding: 14px 18px; margin-bottom: 24px; border-radius: 0 8px 8px 0;">
+                <p style="font-size: 12px; line-height: 1.6; color: #9A9AA4; margin: 0;">
+                  Your profile credentials, delivery addresses, personal preferences, and wishlists have been completely erased from our active databases. In accordance with legal, warranty, and tax compliance regulations, historical transaction records and invoices remain securely archived in our private financial ledgers.
+                </p>
+              </div>
+
+              <p style="font-size: 13px; line-height: 1.7; color: #9A9AA4; margin: 0 0 20px 0;">
+                We thank you for the privilege of serving your horological journey. Should you ever wish to explore handcrafted timepieces with us again, you are always welcome to create a new portfolio.
+              </p>
+
+              <!-- Concierge support callout -->
+              <p style="font-size: 12px; color: #7E7E8B; margin: 0;">
+                If you did not initiate this request or have immediate questions, please contact our concierge immediately at <a href="mailto:${conciergeEmail}" style="color: #D4AF37;">${conciergeEmail}</a>.
+              </p>
+
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #070709; padding: 26px 36px; border-top: 1px solid #1C1C24; text-align: center;">
+              <p style="font-size: 11px; color: #7A7A84; line-height: 1.6; margin: 0 0 8px 0;">
+                Boutique Inquiries: <span style="color: #D4AF37;">${conciergeEmail}</span> &bull; <span style="color: #D4AF37;">${boutiquePhone}</span>
+              </p>
+              <p style="font-size: 10px; color: #55555E; margin: 0;">
+                &copy; ${currentYear} ${storeName}. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+};
+
+/**
+ * Plain text fallback for account deleted email
+ */
+const generateAccountDeletedText = (name, email, deletionDate, settings = {}) => {
+  const { storeName, supportEmail: conciergeEmail, phone: boutiquePhone } = getSafeSettings(settings);
+  const formattedDate = formatOrderDate(deletionDate || new Date());
+
+  return `ACCOUNT DELETED SUCCESSFULLY - ${storeName}
+
+Dear ${name || 'Collector'},
+
+We confirm that your ${storeName} account has been permanently deleted as per your request.
+
+ACCOUNT DELETION DETAILS:
+- Account Email: ${email}
+- Deletion Date: ${formattedDate}
+- Account Status: Permanently Deleted
+
+Your profile credentials, delivery addresses, and wishlists have been completely erased from our active databases. Any historical purchase invoices required for legal and tax compliance remain preserved in our confidential ledgers.
+
+If you have questions or need assistance, please contact our concierge at ${conciergeEmail} or ${boutiquePhone}.
+
+Best regards,
+The ${storeName} Concierge Team
+`;
+};
+
+/**
+ * Sends an Account Deleted Successfully email via Brevo
+ */
+const sendAccountDeletedEmail = async ({ name, email, deletionDate }) => {
+  let settings = null;
+  try {
+    const mongoose = require('mongoose');
+    if (mongoose.connection && mongoose.connection.readyState === 1) {
+      settings = await Settings.getSingleton();
+    }
+  } catch (err) {
+    console.warn('[Brevo Email] Could not fetch settings, using defaults:', err.message);
+  }
+
+  const { storeName } = getSafeSettings(settings);
+  const apiKey = (process.env.BREVO_API_KEY || '').trim();
+  const senderEmail = (process.env.BREVO_SENDER_EMAIL || '').trim();
+  const senderName = (process.env.BREVO_SENDER_NAME || storeName).trim();
+
+  if (!apiKey || !senderEmail) {
+    console.warn(
+      '[Brevo Email] Configuration notice: BREVO_API_KEY or BREVO_SENDER_EMAIL is not set in backend/.env. Account deletion email skipped.'
+    );
+    return {
+      success: false,
+      skipped: true,
+      reason: 'Brevo credentials not configured in backend/.env'
+    };
+  }
+
+  try {
+    const client = new BrevoClient({ apiKey });
+
+    const payload = {
+      subject: `Account Deleted Successfully | ${storeName}`,
+      sender: {
+        name: senderName,
+        email: senderEmail
+      },
+      to: [
+        {
+          email: email.toLowerCase().trim(),
+          name: name ? name.trim() : 'Valued Collector'
+        }
+      ],
+      htmlContent: generateAccountDeletedHtml(name, email, deletionDate, settings),
+      textContent: generateAccountDeletedText(name, email, deletionDate, settings)
+    };
+
+    const response = await client.transactionalEmails.sendTransacEmail(payload);
+
+    console.log(
+      `[Brevo Email] Account deletion confirmation email successfully sent to ${email} (Message ID: ${response?.messageId || 'dispatched'})`
+    );
+
+    return {
+      success: true,
+      messageId: response?.messageId
+    };
+  } catch (error) {
+    const errorMessage =
+      error?.response?.body?.message ||
+      error?.body?.message ||
+      error?.message ||
+      'Unknown error during Brevo API request';
+    const statusCode = error?.statusCode || error?.status || 'N/A';
+
+    console.error(
+      `[Brevo Email] Account deletion email delivery failed for ${email} [Status: ${statusCode}]: ${errorMessage}`
+    );
+
+    return {
+      success: false,
+      error: errorMessage
+    };
+  }
+};
+
 module.exports = {
   sendRegistrationWelcomeEmail,
   sendOrderConfirmationEmail,
+  sendAccountDeletedEmail,
   generateWelcomeHtml,
   generateWelcomeText,
   generateOrderConfirmationHtml,
-  generateOrderConfirmationText
+  generateOrderConfirmationText,
+  generateAccountDeletedHtml,
+  generateAccountDeletedText
 };

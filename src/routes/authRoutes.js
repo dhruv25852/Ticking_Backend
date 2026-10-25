@@ -5,6 +5,7 @@ const {
   registerUser,
   loginUser,
   adminLogin,
+  logoutUser,
   getUserProfile,
   updateAccount,
   changePassword,
@@ -34,12 +35,14 @@ const authLimiter = rateLimit({
 router.post('/register', authLimiter, registerUser);
 router.post('/login', authLimiter, loginUser);
 router.post('/admin/login', authLimiter, adminLogin);
+router.post('/logout', logoutUser);
 
 // Customer account routes (Private)
 router.route('/profile').get(protect, getUserProfile).put(protect, updateAccount);
 router.put('/update-account', protect, updateAccount);
 router.put('/change-password', protect, authLimiter, changePassword);
 router.delete('/delete-account', protect, deleteAccount);
+router.post('/delete-account', protect, deleteAccount);
 
 // Profile photo upload & delete (Private)
 router.post('/profile/photo', protect, upload.single('avatar'), uploadProfilePhoto);

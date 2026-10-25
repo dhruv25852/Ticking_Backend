@@ -300,7 +300,7 @@ const createProduct = async (req, res) => {
     }
 
     const generatedSku = sku || `TCK-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-    const cleanImages = Array.isArray(images) && images.length ? images : ['/images/watches/hero_chronograph.jpg'];
+    const cleanImages = Array.isArray(images) && images.length ? images : ['https://res.cloudinary.com/bjaodxyt/image/upload/v1792843442/hero_chronograph.jpg'];
 
     // Collect public_ids from payload or extract from Cloudinary URLs
     let cleanPublicIds = Array.isArray(imagePublicIds) ? imagePublicIds : [];

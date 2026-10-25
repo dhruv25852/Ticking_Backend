@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Order = require('../models/Order');
-const { sendRegistrationWelcomeEmail } = require('../services/emailService');
+const { sendRegistrationWelcomeEmail, sendAccountDeletedEmail } = require('../services/emailService');
 const {
   isCloudinaryConfigured,
   uploadStreamToCloudinary,
@@ -372,29 +372,107 @@ const deleteProfilePhoto = async (req, res) => {
   }
 };
 
-// @desc    Soft delete user account
+// @desc    Permanently delete user account after password verification
 // @route   DELETE /api/auth/delete-account
+// @route   POST /api/auth/delete-account
 // @access  Private
 const deleteAccount = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
+    const { password } = req.body;
 
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+    // 1. Password is required
+    if (!password || !password.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current password is required to delete your account'
+      });
     }
 
-    user.isActive = false;
-    user.deletedAt = new Date();
-    await user.save();
+    // 2. Fetch authenticated user with password from database
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User account not found'
+      });
+    }
 
-    res.json({
+    // 3. Prevent accidental deletion of primary master administrator account
+    if (user.role === 'admin' && user.email.toLowerCase() === 'admin@ticking.com') {
+      return res.status(403).json({
+        success: false,
+        message: 'The primary master administrator account cannot be deleted'
+      });
+    }
+
+    // 4. Verify password securely using bcrypt
+    const isMatch = await user.matchPassword(password.trim());
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'Incorrect password. Account deletion cancelled.'
+      });
+    }
+
+    // Capture user details for confirmation email before deletion
+    const userEmail = user.email;
+    const userName = user.name;
+    const userId = user._id;
+    const deletionDate = new Date();
+
+    // 5. Clean up avatar from Cloudinary if stored there
+    try {
+      if (user.avatarPublicId) {
+        await deleteFromCloudinary(user.avatarPublicId);
+      } else if (user.avatar && user.avatar.includes('res.cloudinary.com')) {
+        const extracted = extractPublicIdFromUrl(user.avatar);
+        if (extracted) await deleteFromCloudinary(extracted);
+      }
+    } catch (cloudErr) {
+      console.warn('[Account Deletion] Could not remove avatar from Cloudinary:', cloudErr.message);
+    }
+
+    // 6. Clean up temporary personal cart and wishlist data
+    try {
+      const Cart = require('../models/Cart');
+      const Wishlist = require('../models/Wishlist');
+      await Cart.deleteMany({ user: userId });
+      await Wishlist.deleteMany({ user: userId });
+    } catch (cleanErr) {
+      console.warn('[Account Deletion] Notice during cart/wishlist cleanup:', cleanErr.message);
+    }
+
+    // 7. Delete the user document securely from MongoDB Atlas
+    // Historical order records in the Order collection are preserved for business, tax, and warranty compliance
+    await User.findByIdAndDelete(userId);
+
+    // 8. Send Account Deleted confirmation email via Brevo
+    try {
+      await sendAccountDeletedEmail({
+        name: userName,
+        email: userEmail,
+        deletionDate
+      });
+    } catch (emailErr) {
+      console.error('[Account Deletion] Brevo email notification failed:', emailErr.message);
+    }
+
+    // 9. Clear session cookie
+    res.cookie('token', '', {
+      httpOnly: true,
+      expires: new Date(0)
+    });
+
+    return res.json({
       success: true,
-      message: 'Account successfully deactivated (soft delete applied)',
-      isActive: false,
-      deletedAt: user.deletedAt
+      message: 'Account successfully deleted. A confirmation email has been sent.'
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('[Account Deletion Error]:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Server error while deleting account'
+    });
   }
 };
 
@@ -403,18 +481,29 @@ const deleteAccount = async (req, res) => {
 // @access  Private/Admin
 const getCustomers = async (req, res) => {
   try {
-    const customers = await User.find({ role: 'customer' })
+    const customers = await User.find({ role: { $ne: 'admin' } })
       .select('-password')
       .sort({ createdAt: -1 });
 
     const customersWithOrders = await Promise.all(
       customers.map(async (cust) => {
-        const orderCount = await Order.countDocuments({ user: cust._id });
-        const orders = await Order.find({ user: cust._id, orderStatus: { $ne: 'Cancelled' } });
-        const totalSpent = orders.reduce((acc, curr) => acc + (curr.grandTotal || 0), 0);
+        const userOrders = await Order.find({
+          $or: [
+            { user: cust._id },
+            { 'shippingAddress.email': cust.email.toLowerCase() }
+          ],
+          orderStatus: { $ne: 'Cancelled' }
+        });
+
+        const totalOrders = userOrders.length;
+        const totalSpent = userOrders.reduce(
+          (acc, curr) => acc + (curr.grandTotal || curr.totalAmount || curr.subtotal || 0),
+          0
+        );
+
         return {
           ...cust.toObject(),
-          totalOrders: orderCount,
+          totalOrders,
           totalSpent
         };
       })
@@ -422,7 +511,8 @@ const getCustomers = async (req, res) => {
 
     res.json(customersWithOrders);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('[Get Customers Error]:', error);
+    res.status(500).json({ message: error.message || 'Failed to retrieve customers from MongoDB Atlas' });
   }
 };
 
@@ -463,10 +553,22 @@ const updateCustomerStatus = async (req, res) => {
   }
 };
 
+// @desc    Logout user / clear cookies
+// @route   POST /api/auth/logout
+// @access  Public
+const logoutUser = async (req, res) => {
+  res.cookie('token', '', {
+    httpOnly: true,
+    expires: new Date(0)
+  });
+  res.json({ success: true, message: 'Logged out successfully' });
+};
+
 module.exports = {
   registerUser,
   loginUser,
   adminLogin,
+  logoutUser,
   getUserProfile,
   updateUserProfile: updateAccount,
   updateAccount,
