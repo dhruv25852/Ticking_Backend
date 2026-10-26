@@ -65,6 +65,26 @@ const orderSchema = new mongoose.Schema(
       type: Date,
       default: null
     },
+    paymentSuccessEmailSent: {
+      type: Boolean,
+      default: false
+    },
+    paymentSuccessEmailSentAt: {
+      type: Date,
+      default: null
+    },
+    deliveryEmailSent: {
+      type: Boolean,
+      default: false
+    },
+    deliveryEmailSentAt: {
+      type: Date,
+      default: null
+    },
+    deliveredAt: {
+      type: Date,
+      default: null
+    },
     orderStatus: {
       type: String,
       enum: ['Pending', 'Confirmed', 'Processing', 'Shipped', 'Delivered', 'Cancelled'],

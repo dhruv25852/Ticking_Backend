@@ -4,7 +4,7 @@ const Order = require('../models/Order');
 const Product = require('../models/Product');
 const Cart = require('../models/Cart');
 const Settings = require('../models/Settings');
-const { sendOrderConfirmationEmail } = require('../services/emailService');
+const { sendOrderConfirmationEmail, sendPaymentSuccessEmail } = require('../services/emailService');
 
 // @desc    Get Razorpay Public Configuration
 // @route   GET /api/payment/config
@@ -107,11 +107,23 @@ const createRazorpayOrder = async (req, res) => {
     });
   } catch (error) {
     console.error('[Razorpay Create Order Error]:', error);
-    let errorMessage = error.error?.description || error.message || 'Failed to initiate Razorpay order';
-    if (errorMessage.toLowerCase().includes('amount exceeds maximum')) {
-      errorMessage = 'This acquisition amount exceeds your standard Razorpay transaction limit (typically ₹5,00,000). For high-value timepieces, please select Cash on Delivery or request a higher transaction limit in your Razorpay Dashboard.';
+    const rawErrorDesc = error.error?.description || error.message || 'Failed to initiate Razorpay order';
+    const isAmountExceeded =
+      rawErrorDesc.toLowerCase().includes('amount exceeds maximum') ||
+      (error.error?.code === 'BAD_REQUEST_ERROR' &&
+        String(error.error?.description || '').toLowerCase().includes('amount exceeds'));
+
+    let errorMessage = rawErrorDesc;
+    if (isAmountExceeded) {
+      errorMessage =
+        'This order amount exceeds the standard transaction limit enforced by your Razorpay merchant account (typically ₹5,00,000 for default accounts). To process higher-value timepiece acquisitions online, the merchant account must request a transaction limit approval via the Razorpay Dashboard. In the meantime, you can complete your acquisition using Cash on Delivery or contact concierge support.';
     }
-    res.status(400).json({ message: errorMessage });
+
+    res.status(400).json({
+      message: errorMessage,
+      isLimitExceeded: isAmountExceeded,
+      razorpayError: rawErrorDesc
+    });
   }
 };
 
@@ -261,9 +273,25 @@ const verifyRazorpayPayment = async (req, res) => {
     // Clear customer cart in MongoDB Atlas
     await Cart.findOneAndUpdate({ user: req.user._id }, { items: [] });
 
-    // Asynchronously send luxury Brevo confirmation email
-    sendOrderConfirmationEmail({ order: createdOrder, user: req.user }).catch((emailErr) => {
-      console.error('[Brevo Email] Order confirmation dispatch failed for Razorpay order:', createdOrder.orderId, emailErr.message);
+    // Asynchronously send luxury Brevo Order Confirmation email
+    sendOrderConfirmationEmail({
+      order: createdOrder,
+      user: req.user
+    }).catch((emailErr) => {
+      console.error('[Brevo Email] Order confirmation dispatch failed for order:', createdOrder.orderId, emailErr.message);
+    });
+
+    // Asynchronously send luxury Brevo Payment Successful confirmation email
+    sendPaymentSuccessEmail({
+      order: createdOrder,
+      user: req.user,
+      paymentDetails: {
+        razorpayPaymentId: razorpay_payment_id,
+        razorpayOrderId: razorpay_order_id,
+        paymentMethod: 'Online Payment (Razorpay Card / NetBanking / UPI)'
+      }
+    }).catch((emailErr) => {
+      console.error('[Brevo Email] Payment success notification dispatch failed for order:', createdOrder.orderId, emailErr.message);
     });
 
     res.status(201).json(createdOrder);

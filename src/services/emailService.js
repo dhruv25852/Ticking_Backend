@@ -335,8 +335,22 @@ const generateOrderConfirmationHtml = (order, user = {}, settings = {}) => {
   const isCod = order.paymentMethod === 'Cash on Delivery';
   const paymentMethodLabel = isCod ? 'Cash on Delivery' : (order.paymentMethod || 'Online Payment');
   const paymentStatusBadgeColor = isCod ? '#F59E0B' : '#10B981';
-  const paymentStatusText = isCod ? 'Pay on Delivery (Pending)' : 'Paid (Confirmed & Verified)';
+  const paymentStatusText = isCod ? 'Pending' : 'Paid';
+  const paymentStatusNote = isCod ? 'Pay on Delivery' : 'Verified via Razorpay';
   const transactionId = order.paymentId || order.trackingNumber || orderNumber;
+
+  // Calculate estimated delivery date (3–5 business days)
+  const calcEstimatedDelivery = (dateInput) => {
+    const d = new Date(dateInput || Date.now());
+    d.setDate(d.getDate() + 4);
+    return d.toLocaleDateString('en-IN', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+  };
+  const estimatedDeliveryDate = calcEstimatedDelivery(order.createdAt || new Date());
 
   // Build rows for each watch in the order (clean luxury typography without product images)
   const itemsHtml = (order.items || [])
@@ -487,7 +501,7 @@ const generateOrderConfirmationHtml = (order, user = {}, settings = {}) => {
                         <td width="33%" style="text-align: right;">
                           <div style="font-size: 9px; color: #7E7E8B; text-transform: uppercase; letter-spacing: 0.15em;">Payment Status</div>
                           <div style="font-size: 11px; font-weight: 700; color: ${paymentStatusBadgeColor}; margin-top: 3px; text-transform: uppercase;">
-                            ${isCod ? 'Pay on Delivery' : 'Paid'}
+                            ${paymentStatusText}
                           </div>
                         </td>
                       </tr>
@@ -559,6 +573,11 @@ const generateOrderConfirmationHtml = (order, user = {}, settings = {}) => {
                       ${shippingAddr.city || ''}, ${shippingAddr.state || ''} &bull; ${shippingAddr.pincode || ''}<br />
                       <span style="color: #6C6C78;">Tel:</span> ${shippingAddr.phone || 'N/A'}
                     </div>
+                    <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #1E1E28; font-size: 11px;">
+                      <span style="color: #7E7E8B; text-transform: uppercase; letter-spacing: 0.1em; display: block; margin-bottom: 2px;">Estimated Delivery</span>
+                      <strong style="color: #F3E5AB;">${estimatedDeliveryDate}</strong>
+                      <span style="color: #8A8A96; display: block; margin-top: 1px;">(3–5 Business Days &bull; White-Glove Insured Transit)</span>
+                    </div>
                   </td>
 
                   <td width="4%" class="col-half">&nbsp;</td>
@@ -571,7 +590,7 @@ const generateOrderConfirmationHtml = (order, user = {}, settings = {}) => {
                       <span style="color: #7E7E8B;">Method:</span> <strong>${paymentMethodLabel}</strong>
                     </div>
                     <div style="font-size: 13px; color: #FFFFFF; margin-bottom: 6px;">
-                      <span style="color: #7E7E8B;">Status:</span> <span style="color: ${paymentStatusBadgeColor}; font-weight: 600;">${paymentStatusText}</span>
+                      <span style="color: #7E7E8B;">Status:</span> <strong style="color: ${paymentStatusBadgeColor};">${paymentStatusText}</strong> <span style="font-size: 11px; color: #8A8A96;">(${paymentStatusNote})</span>
                     </div>
                     <div style="font-size: 11px; color: #8A8A96; word-break: break-all;">
                       <span style="color: #7E7E8B;">Reference:</span> ${transactionId}
@@ -645,8 +664,21 @@ const generateOrderConfirmationText = (order, user = {}, settings = {}) => {
   const currentYear = new Date().getFullYear();
   const isCod = order.paymentMethod === 'Cash on Delivery';
   const paymentMethodLabel = isCod ? 'Cash on Delivery' : (order.paymentMethod || 'Online Payment');
-  const paymentStatusText = isCod ? 'Pay on Delivery (Pending)' : 'Paid (Confirmed & Verified)';
+  const paymentStatusText = isCod ? 'Pending' : 'Paid';
+  const paymentStatusNote = isCod ? 'Pay on Delivery' : 'Verified via Razorpay';
   const transactionId = order.paymentId || order.trackingNumber || orderNumber;
+
+  const calcEstimatedDelivery = (dateInput) => {
+    const d = new Date(dateInput || Date.now());
+    d.setDate(d.getDate() + 4);
+    return d.toLocaleDateString('en-IN', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+  };
+  const estimatedDeliveryDate = calcEstimatedDelivery(order.createdAt || new Date());
 
   const itemsText = (order.items || [])
     .map((item, idx) => {
@@ -677,11 +709,11 @@ FINANCIAL SUMMARY:
 - Subtotal: ${formatCurrency(order.subtotal)}
 ${order.discount > 0 ? `- Privilege Discount: -${formatCurrency(order.discount)} (${order.couponCode || 'Promo'})\n` : ''}- White-Glove Insured Shipping: COMPLIMENTARY (₹0.00)
 - Luxury Duty / Tax: ${formatCurrency(order.tax)}
-- Total Amount: ${formatCurrency(order.grandTotal)}
+- Total Order Amount: ${formatCurrency(order.grandTotal)}
 
 PAYMENT DETAILS:
 - Payment Method: ${paymentMethodLabel}
-- Payment Status: ${paymentStatusText}
+- Payment Status: ${paymentStatusText} (${paymentStatusNote})
 - Transaction Reference: ${transactionId}
 
 DELIVERY DESTINATION:
@@ -689,6 +721,7 @@ ${shippingAddr.fullName || recipientName}
 ${shippingAddr.address || ''}
 ${shippingAddr.city || ''}, ${shippingAddr.state || ''} - ${shippingAddr.pincode || ''}
 Phone: ${shippingAddr.phone || 'N/A'}
+Estimated Delivery: ${estimatedDeliveryDate} (3-5 Business Days)
 
 View your order online:
 http://localhost:3000/orders/${order._id || order.orderId}
@@ -803,13 +836,14 @@ const sendOrderConfirmationEmail = async ({ order, user }) => {
   }
 
   // 2. Payment verification check:
-  // For online payments, send only if verified/paid. If marked failed, skip.
-  if (order.paymentMethod === 'Online Payment' && order.paymentStatus === 'Failed') {
-    console.log(`[Brevo Email] Order #${order.orderId} online payment failed. Confirmation email skipped.`);
+  // For online payments, send only after backend verification succeeds (order.paymentStatus === 'Paid').
+  // For Cash on Delivery orders, send immediately upon order creation without waiting for payment.
+  if (order.paymentMethod === 'Online Payment' && order.paymentStatus !== 'Paid') {
+    console.log(`[Brevo Email] Order #${order.orderId} online payment is not verified as Paid (Status: ${order.paymentStatus}). Confirmation email skipped.`);
     return {
       success: false,
       skipped: true,
-      reason: 'Online payment status is Failed'
+      reason: 'Online payment has not been verified as Paid'
     };
   }
 
@@ -866,9 +900,12 @@ const sendOrderConfirmationEmail = async ({ order, user }) => {
   // 6. Dispatch email via Brevo API
   try {
     const client = new BrevoClient({ apiKey });
+    const isCod = order.paymentMethod === 'Cash on Delivery';
 
     const payload = {
-      subject: `Order Confirmed #${order.orderId || ''} | ${storeName}`,
+      subject: isCod
+        ? `Order Confirmed #${order.orderId || ''} (Cash on Delivery) | ${storeName}`
+        : `Order Confirmed #${order.orderId || ''} (Payment Successful) | ${storeName}`,
       sender: {
         name: senderName,
         email: senderEmail
@@ -889,27 +926,19 @@ const sendOrderConfirmationEmail = async ({ order, user }) => {
       `[Brevo Email] Order confirmation email successfully sent for #${order.orderId} to ${recipientEmail} (Message ID: ${response?.messageId || 'dispatched'})`
     );
 
-    // 7. Update confirmationEmailSent flag in MongoDB to prevent duplicate emails
+    // 7. Update confirmationEmailSent flag in MongoDB Atlas to prevent duplicate emails
     try {
-      const mongoose = require('mongoose');
-      const isDbConnected = mongoose.connection && mongoose.connection.readyState === 1;
-
-      if (isDbConnected) {
-        if (typeof order.save === 'function') {
-          order.confirmationEmailSent = true;
-          order.confirmationEmailSentAt = new Date();
-          await order.save();
-        } else if (order._id) {
-          const Order = require('../models/Order');
-          await Order.findByIdAndUpdate(order._id, {
+      const Order = require('../models/Order');
+      if (order._id) {
+        await Order.findByIdAndUpdate(order._id, {
+          $set: {
             confirmationEmailSent: true,
             confirmationEmailSentAt: new Date()
-          });
-        }
-      } else {
-        order.confirmationEmailSent = true;
-        order.confirmationEmailSentAt = new Date();
+          }
+        });
       }
+      order.confirmationEmailSent = true;
+      order.confirmationEmailSentAt = new Date();
     } catch (saveErr) {
       console.warn('[Brevo Email] Notice: could not persist confirmationEmailSent status on order:', saveErr.message);
     }
@@ -1479,9 +1508,1043 @@ const sendPasswordResetSuccessEmail = async ({ name, email }) => {
   }
 };
 
+/**
+ * Generates a luxury black-and-gold responsive HTML payment success email for TICKING
+ */
+const generatePaymentSuccessHtml = (order, user = {}, paymentDetails = {}, settings = {}) => {
+  const { storeName, supportEmail: conciergeEmail, phone: boutiquePhone } = getSafeSettings(settings);
+  const shippingAddr = order.shippingAddress || {};
+  const recipientName = (shippingAddr.fullName || user?.name || 'Valued Collector').trim();
+  const firstName = recipientName.split(' ')[0] || 'Collector';
+  const orderNumber = order.orderId || 'TCK-PAID';
+  const paymentDate = formatOrderDate(order.paymentSuccessEmailSentAt || order.createdAt || new Date());
+  const currentYear = new Date().getFullYear();
+  const razorpayPaymentId = paymentDetails?.razorpayPaymentId || order.paymentId || 'Verified';
+  const paymentMethodLabel = paymentDetails?.paymentMethod || order.paymentMethod || 'Razorpay Online Card Payment';
+  const frontendUrl = (process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:3000').replace(/\/+$/, '');
+
+  const itemsHtml = (order.items || [])
+    .map((item) => {
+      const itemSubtotal = (Number(item.price) || 0) * (Number(item.quantity) || 1);
+      return `
+        <tr>
+          <td style="padding: 16px 0; border-bottom: 1px solid #1C1C24;">
+            <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0">
+              <tr>
+                <td valign="top" style="text-align: left;">
+                  <div style="font-size: 10px; font-weight: 700; color: #D4AF37; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 4px;">
+                    ${item.brand || 'Luxury Manufacture'}
+                  </div>
+                  <div style="font-family: Georgia, serif; font-size: 14px; font-weight: 700; color: #FFFFFF; line-height: 1.35; margin-bottom: 4px;">
+                    ${item.name}
+                  </div>
+                  <div style="font-size: 12px; color: #8A8A96;">
+                    Qty: <strong style="color: #E5E5E5;">${item.quantity}</strong> &times; ${formatCurrency(item.price)}
+                  </div>
+                </td>
+                <td width="120" valign="top" style="text-align: right;">
+                  <div style="font-family: Georgia, serif; font-size: 14px; font-weight: 700; color: #F3E5AB;">
+                    ${formatCurrency(itemSubtotal)}
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      `;
+    })
+    .join('');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment Successful #${orderNumber} | ${storeName}</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #08080A;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      color: #E5E5E5;
+      -webkit-font-smoothing: antialiased;
+    }
+    table {
+      border-collapse: collapse;
+    }
+    a {
+      color: #D4AF37;
+      text-decoration: none;
+    }
+    @media only screen and (max-width: 600px) {
+      .container {
+        width: 100% !important;
+        padding: 8px !important;
+      }
+      .content-padding {
+        padding: 24px 18px !important;
+      }
+      .col-half {
+        display: block !important;
+        width: 100% !important;
+        margin-bottom: 14px !important;
+      }
+      .column-pill {
+        display: block !important;
+        width: 100% !important;
+        margin-bottom: 12px !important;
+        border-left: none !important;
+        border-right: none !important;
+        border-bottom: 1px solid #1F1F2A !important;
+        padding-bottom: 12px !important;
+      }
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #08080A; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #E5E5E5;">
+  <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color: #08080A; padding: 36px 12px;">
+    <tr>
+      <td align="center">
+        <!-- Main Card Container -->
+        <table role="presentation" class="container" width="100%" border="0" cellpadding="0" cellspacing="0" style="max-width: 620px; background-color: #0F0F13; border: 1px solid #2A261A; border-radius: 16px; overflow: hidden; box-shadow: 0 12px 48px rgba(0,0,0,0.9);">
+          
+          <!-- Top Gold Accent Line -->
+          <tr>
+            <td style="height: 4px; background: linear-gradient(90deg, #996515 0%, #D4AF37 50%, #F3E5AB 100%);"></td>
+          </tr>
+
+          <!-- Header / Brand Emblem -->
+          <tr>
+            <td align="center" style="padding: 34px 28px 22px 28px; border-bottom: 1px solid #1C1C24;">
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <div style="display: inline-block; width: 44px; height: 44px; line-height: 44px; border: 1.5px solid #D4AF37; background: #000000; text-align: center; margin-bottom: 12px;">
+                      <span style="font-family: Georgia, serif; font-size: 22px; font-weight: bold; color: #D4AF37; letter-spacing: 2px;">T</span>
+                    </div>
+                    <div style="font-family: Georgia, serif; font-size: 22px; font-weight: 700; letter-spacing: 0.35em; color: #F3E5AB; text-transform: uppercase;">
+                      T I C K I N G
+                    </div>
+                    <div style="font-size: 9px; letter-spacing: 0.3em; color: #8A8A93; text-transform: uppercase; margin-top: 5px;">
+                      Haute Horlogerie &bull; Swiss Craftsmanship
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Main Content -->
+          <tr>
+            <td class="content-padding" style="padding: 34px 34px 24px 34px; text-align: left;">
+              
+              <!-- Payment Success Badge Pill -->
+              <div style="display: inline-block; background-color: #064E3B; border: 1px solid #059669; border-radius: 50px; padding: 6px 14px; margin-bottom: 16px;">
+                <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.2em; color: #34D399; text-transform: uppercase;">
+                  &#10003; PAYMENT SUCCESSFUL &bull; VERIFIED VIA RAZORPAY
+                </span>
+              </div>
+
+              <!-- Heading -->
+              <h1 style="font-family: Georgia, serif; font-size: 24px; line-height: 1.35; font-weight: 700; color: #FFFFFF; margin: 0 0 14px 0;">
+                Payment Confirmed, ${firstName}.
+              </h1>
+
+              <p style="font-size: 14px; line-height: 1.7; color: #C4C4CC; margin: 0 0 22px 0;">
+                We have successfully verified your online payment for Order <strong style="color: #F3E5AB;">#${orderNumber}</strong>. Your luxury timepiece acquisition has been confirmed and scheduled for white-glove transit preparation.
+              </p>
+
+              <!-- Payment Verification Overview Ledger -->
+              <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color: #14141A; border: 1px solid #262633; border-radius: 12px; margin-bottom: 26px;">
+                <tr>
+                  <td style="padding: 16px 20px;">
+                    <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td width="33%" style="text-align: left;">
+                          <div style="font-size: 9px; color: #7E7E8B; text-transform: uppercase; letter-spacing: 0.15em;">Order Reference</div>
+                          <div style="font-size: 12px; font-weight: 700; color: #F3E5AB; margin-top: 3px;">#${orderNumber}</div>
+                        </td>
+                        <td width="33%" style="text-align: left; padding: 0 10px;">
+                          <div style="font-size: 9px; color: #7E7E8B; text-transform: uppercase; letter-spacing: 0.15em;">Payment Date & Time</div>
+                          <div style="font-size: 12px; font-weight: 600; color: #FFFFFF; margin-top: 3px;">${paymentDate}</div>
+                        </td>
+                        <td width="33%" style="text-align: right;">
+                          <div style="font-size: 9px; color: #7E7E8B; text-transform: uppercase; letter-spacing: 0.15em;">Payment Status</div>
+                          <div style="font-size: 11px; font-weight: 700; color: #10B981; margin-top: 3px; text-transform: uppercase;">
+                            Successful
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Section: Acquired Timepieces -->
+              <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.2em; color: #D4AF37; text-transform: uppercase; margin-bottom: 12px; border-bottom: 1px solid #1C1C24; padding-bottom: 6px;">
+                Acquired Timepieces (${order.items?.length || 0})
+              </div>
+
+              <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+                ${itemsHtml}
+              </table>
+
+              <!-- Financial Summary Ledger -->
+              <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color: #14141A; border: 1px solid #262633; border-radius: 12px; margin-bottom: 26px;">
+                <tr>
+                  <td style="padding: 20px 24px;">
+                    <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="font-size: 13px; color: #A0A0AB; padding-bottom: 8px;">Subtotal</td>
+                        <td style="font-size: 13px; color: #FFFFFF; text-align: right; padding-bottom: 8px;">${formatCurrency(order.subtotal)}</td>
+                      </tr>
+                      ${
+                        order.discount > 0
+                          ? `
+                      <tr>
+                        <td style="font-size: 13px; color: #34D399; padding-bottom: 8px;">Privilege Discount ${order.couponCode ? `(${order.couponCode})` : ''}</td>
+                        <td style="font-size: 13px; color: #34D399; text-align: right; padding-bottom: 8px;">-${formatCurrency(order.discount)}</td>
+                      </tr>`
+                          : ''
+                      }
+                      <tr>
+                        <td style="font-size: 13px; color: #A0A0AB; padding-bottom: 8px;">White-Glove Insured Shipping</td>
+                        <td style="font-size: 13px; color: #F3E5AB; text-align: right; font-weight: 600; padding-bottom: 8px;">COMPLIMENTARY</td>
+                      </tr>
+                      <tr>
+                        <td style="font-size: 13px; color: #A0A0AB; padding-bottom: 14px;">Luxury Duty / VAT</td>
+                        <td style="font-size: 13px; color: #FFFFFF; text-align: right; padding-bottom: 14px;">${formatCurrency(order.tax)}</td>
+                      </tr>
+                      <tr>
+                        <td style="border-top: 1px solid #2A2A38; padding-top: 14px; font-size: 14px; font-weight: 700; color: #FFFFFF; text-transform: uppercase; letter-spacing: 0.1em;">
+                          Total Amount Paid
+                        </td>
+                        <td style="border-top: 1px solid #2A2A38; padding-top: 14px; font-family: Georgia, serif; font-size: 20px; font-weight: 700; color: #F3E5AB; text-align: right;">
+                          ${formatCurrency(order.grandTotal)}
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Two Column Customer & Payment Cards -->
+              <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 26px;">
+                <tr>
+                  <td class="col-half" width="48%" valign="top" style="background-color: #121217; border: 1px solid #262633; border-radius: 12px; padding: 18px 20px;">
+                    <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.18em; color: #D4AF37; text-transform: uppercase; margin-bottom: 10px;">
+                      Delivery Address
+                    </div>
+                    <div style="font-size: 13px; font-weight: 700; color: #FFFFFF; margin-bottom: 4px;">
+                      ${shippingAddr.fullName || recipientName}
+                    </div>
+                    <div style="font-size: 12px; line-height: 1.6; color: #9A9AA4;">
+                      ${shippingAddr.address || ''}<br />
+                      ${shippingAddr.city || ''}, ${shippingAddr.state || ''} &bull; ${shippingAddr.pincode || ''}<br />
+                      <span style="color: #6C6C78;">Tel:</span> ${shippingAddr.phone || 'N/A'}
+                    </div>
+                    <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid #1E1E28; font-size: 11px; color: #D4AF37;">
+                      Estimated Transit: 3–5 Business Days
+                    </div>
+                  </td>
+
+                  <td width="4%" class="col-half">&nbsp;</td>
+
+                  <td class="col-half" width="48%" valign="top" style="background-color: #121217; border: 1px solid #262633; border-radius: 12px; padding: 18px 20px;">
+                    <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.18em; color: #D4AF37; text-transform: uppercase; margin-bottom: 10px;">
+                      Payment Verification
+                    </div>
+                    <div style="font-size: 13px; color: #FFFFFF; margin-bottom: 6px;">
+                      <span style="color: #7E7E8B;">Payment Status:</span> <strong style="color: #10B981;">Successful</strong>
+                    </div>
+                    <div style="font-size: 13px; color: #FFFFFF; margin-bottom: 6px;">
+                      <span style="color: #7E7E8B;">Payment Method:</span> <strong>${paymentMethodLabel}</strong>
+                    </div>
+                    <div style="font-size: 11px; color: #8A8A96; word-break: break-all; margin-bottom: 4px;">
+                      <span style="color: #7E7E8B;">Razorpay Payment ID:</span><br />
+                      <strong style="color: #F3E5AB; font-family: monospace;">${razorpayPaymentId}</strong>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Action Button -->
+              <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 26px;">
+                <tr>
+                  <td align="center">
+                    <a href="${frontendUrl}/orders/${order._id || order.orderId}" target="_blank" style="display: inline-block; background: linear-gradient(90deg, #D4AF37 0%, #B8860B 100%); color: #000000; font-size: 12px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; text-decoration: none; padding: 15px 34px; border-radius: 50px; box-shadow: 0 4px 18px rgba(212, 175, 55, 0.35);">
+                      VIEW ORDER IN YOUR VAULT &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Trust Pillars -->
+              <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="border-top: 1px solid #1C1C24; padding-top: 22px; margin-top: 8px;">
+                <tr>
+                  <td class="column-pill" width="33%" style="text-align: center; padding: 0 6px;">
+                    <div style="font-size: 10px; font-weight: 700; color: #F3E5AB; letter-spacing: 0.12em; text-transform: uppercase;">100% Authentic</div>
+                    <div style="font-size: 10px; color: #7E7E8B; margin-top: 4px;">Original Box & Papers</div>
+                  </td>
+                  <td class="column-pill" width="33%" style="text-align: center; padding: 0 6px; border-left: 1px solid #1F1F2A; border-right: 1px solid #1F1F2A;">
+                    <div style="font-size: 10px; font-weight: 700; color: #F3E5AB; letter-spacing: 0.12em; text-transform: uppercase;">Insured Transit</div>
+                    <div style="font-size: 10px; color: #7E7E8B; margin-top: 4px;">White-Glove Courier</div>
+                  </td>
+                  <td class="column-pill" width="33%" style="text-align: center; padding: 0 6px;">
+                    <div style="font-size: 10px; font-weight: 700; color: #F3E5AB; letter-spacing: 0.12em; text-transform: uppercase;">5-Year Warranty</div>
+                    <div style="font-size: 10px; color: #7E7E8B; margin-top: 4px;">Comprehensive Coverage</div>
+                  </td>
+                </tr>
+              </table>
+
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #070709; padding: 24px 34px; border-top: 1px solid #1C1C24; text-align: center;">
+              <p style="font-size: 11px; color: #7A7A84; line-height: 1.6; margin: 0 0 8px 0;">
+                For private concierge assistance, payment inquiries, or transit queries, please contact <span style="color: #D4AF37;">${conciergeEmail}</span> or call <span style="color: #D4AF37;">${boutiquePhone}</span>.
+              </p>
+              <p style="font-size: 10px; color: #55555E; margin: 0;">
+                &copy; ${currentYear} ${storeName}. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+};
+
+/**
+ * Generates clean plain text alternative for payment success email
+ */
+const generatePaymentSuccessText = (order, user = {}, paymentDetails = {}, settings = {}) => {
+  const { storeName, supportEmail: conciergeEmail, phone: boutiquePhone } = getSafeSettings(settings);
+  const shippingAddr = order.shippingAddress || {};
+  const recipientName = (shippingAddr.fullName || user?.name || 'Valued Collector').trim();
+  const firstName = recipientName.split(' ')[0] || 'Collector';
+  const orderNumber = order.orderId || 'TCK-PAID';
+  const paymentDate = formatOrderDate(order.paymentSuccessEmailSentAt || order.createdAt || new Date());
+  const currentYear = new Date().getFullYear();
+  const razorpayPaymentId = paymentDetails?.razorpayPaymentId || order.paymentId || 'Verified';
+  const paymentMethodLabel = paymentDetails?.paymentMethod || order.paymentMethod || 'Razorpay Online Card Payment';
+
+  const itemsText = (order.items || [])
+    .map((item, idx) => `  ${idx + 1}. ${item.name} (${item.brand || 'Luxury Watch'})\n     Qty: ${item.quantity} | Unit Price: ${formatCurrency(item.price)} | Total: ${formatCurrency(item.price * item.quantity)}`)
+    .join('\n\n');
+
+  return `
+================================================================================
+                    T I C K I N G   L U X U R Y   W A T C H
+                     Haute Horlogerie - Swiss Craftsmanship
+================================================================================
+
+PAYMENT SUCCESSFUL - ORDER CONFIRMATION
+Order Reference: #${orderNumber}
+Payment Status: SUCCESSFUL (Verified via Razorpay)
+Date & Time: ${paymentDate}
+
+Dear ${firstName},
+
+Thank you for your payment. Your online card payment for Order #${orderNumber} has been verified and confirmed. Your timepiece acquisition is now reserved in our vaults.
+
+ACQUIRED TIMEPIECES:
+--------------------------------------------------------------------------------
+${itemsText}
+--------------------------------------------------------------------------------
+
+FINANCIAL SUMMARY:
+- Subtotal: ${formatCurrency(order.subtotal)}
+${order.discount > 0 ? `- Privilege Discount: -${formatCurrency(order.discount)}\n` : ''}- White-Glove Insured Shipping: COMPLIMENTARY
+- Luxury Duty / Tax: ${formatCurrency(order.tax)}
+--------------------------------------------------------------------------------
+TOTAL AMOUNT PAID: ${formatCurrency(order.grandTotal)}
+--------------------------------------------------------------------------------
+
+PAYMENT & VERIFICATION DETAILS:
+- Payment Method: ${paymentMethodLabel}
+- Payment Status: Successful
+- Razorpay Payment ID: ${razorpayPaymentId}
+
+DELIVERY DESTINATION:
+${shippingAddr.fullName || recipientName}
+${shippingAddr.address || ''}
+${shippingAddr.city || ''}, ${shippingAddr.state || ''} - ${shippingAddr.pincode || ''}
+Phone: ${shippingAddr.phone || 'N/A'}
+Estimated Transit: 3-5 Business Days
+
+For concierge support or inquiries, please reach out to ${conciergeEmail} or call ${boutiquePhone}.
+
+(c) ${currentYear} ${storeName}. All rights reserved.
+`;
+};
+
+/**
+ * Sends a Payment Successful confirmation email via Brevo
+ */
+const sendPaymentSuccessEmail = async ({ order, user, paymentDetails = {} }) => {
+  if (!order) {
+    return { success: false, reason: 'No order provided' };
+  }
+
+  // 1. Idempotency check: Do not send duplicate payment success emails
+  if (order.paymentSuccessEmailSent) {
+    console.log(`[Brevo Email] Payment success email already sent for #${order.orderId || order._id}. Skipping.`);
+    return {
+      success: true,
+      skipped: true,
+      reason: 'Payment success email already dispatched previously'
+    };
+  }
+
+  // 2. Verification check: Payment must be Paid
+  if (order.paymentStatus !== 'Paid') {
+    console.log(`[Brevo Email] Order #${order.orderId} payment status is not Paid (${order.paymentStatus}). Payment email skipped.`);
+    return {
+      success: false,
+      skipped: true,
+      reason: 'Order payment status is not Paid'
+    };
+  }
+
+  // Do not send for Cash on Delivery unless paid
+  if (order.paymentMethod === 'Cash on Delivery' && order.paymentStatus !== 'Paid') {
+    console.log(`[Brevo Email] COD order #${order.orderId} is unpaid. Payment email skipped.`);
+    return {
+      success: false,
+      skipped: true,
+      reason: 'COD order is unpaid'
+    };
+  }
+
+  // 3. Resolve recipient email
+  const recipientEmail = (
+    order.shippingAddress?.email ||
+    user?.email ||
+    ''
+  ).toLowerCase().trim();
+
+  const recipientName = (
+    order.shippingAddress?.fullName ||
+    user?.name ||
+    'Valued Collector'
+  ).trim();
+
+  if (!recipientEmail) {
+    console.warn(`[Brevo Email] No valid recipient email address for order #${order.orderId || order._id}. Email skipped.`);
+    return {
+      success: false,
+      skipped: true,
+      reason: 'No recipient email address found'
+    };
+  }
+
+  // 4. Retrieve store settings safely
+  let settings = null;
+  try {
+    const mongoose = require('mongoose');
+    if (mongoose.connection && mongoose.connection.readyState === 1) {
+      settings = await Settings.getSingleton();
+    }
+  } catch (err) {
+    console.warn('[Brevo Email] Could not fetch settings, using defaults:', err.message);
+  }
+
+  const { storeName } = getSafeSettings(settings);
+  const apiKey = (process.env.BREVO_API_KEY || '').trim();
+  const senderEmail = (process.env.BREVO_SENDER_EMAIL || '').trim();
+  const senderName = (process.env.BREVO_SENDER_NAME || storeName).trim();
+
+  if (!apiKey || !senderEmail) {
+    console.warn(
+      `[Brevo Email] Configuration notice: BREVO_API_KEY or BREVO_SENDER_EMAIL is not set in backend/.env. Order #${order.orderId} payment email skipped.`
+    );
+    return {
+      success: false,
+      skipped: true,
+      reason: 'Brevo credentials not configured in backend/.env'
+    };
+  }
+
+  try {
+    const client = new BrevoClient({ apiKey });
+
+    const payload = {
+      subject: `Payment Successful – TICKING LUXARY WATCH Order Confirmation (#${order.orderId || ''})`,
+      sender: {
+        name: senderName,
+        email: senderEmail
+      },
+      to: [
+        {
+          email: recipientEmail,
+          name: recipientName
+        }
+      ],
+      htmlContent: generatePaymentSuccessHtml(order, user, paymentDetails, settings),
+      textContent: generatePaymentSuccessText(order, user, paymentDetails, settings)
+    };
+
+    const response = await client.transactionalEmails.sendTransacEmail(payload);
+
+    console.log(
+      `[Brevo Email] Payment success email sent for #${order.orderId} to ${recipientEmail} (Message ID: ${response?.messageId || 'dispatched'})`
+    );
+
+    // Atomically persist paymentSuccessEmailSent flag in MongoDB Atlas
+    try {
+      const Order = require('../models/Order');
+      await Order.findByIdAndUpdate(order._id, {
+        $set: {
+          paymentSuccessEmailSent: true,
+          paymentSuccessEmailSentAt: new Date()
+        }
+      });
+      order.paymentSuccessEmailSent = true;
+      order.paymentSuccessEmailSentAt = new Date();
+    } catch (saveErr) {
+      console.warn('[Brevo Email] Could not persist paymentSuccessEmailSent status:', saveErr.message);
+    }
+
+    return {
+      success: true,
+      messageId: response?.messageId
+    };
+  } catch (error) {
+    const errorMessage =
+      error?.response?.body?.message ||
+      error?.body?.message ||
+      error?.message ||
+      'Unknown error during Brevo API request';
+    const statusCode = error?.statusCode || error?.status || 'N/A';
+
+    console.error(
+      `[Brevo Email] Payment success email delivery failed for #${order.orderId} (${recipientEmail}) [Status: ${statusCode}]: ${errorMessage}`
+    );
+
+    return {
+      success: false,
+      error: errorMessage
+    };
+  }
+};
+
+/**
+ * Generates a luxury black-and-gold responsive HTML order delivered email for TICKING
+ */
+const generateOrderDeliveredHtml = (order, user = {}, settings = {}) => {
+  const { storeName, supportEmail: conciergeEmail, phone: boutiquePhone } = getSafeSettings(settings);
+  const shippingAddr = order.shippingAddress || {};
+  const recipientName = (shippingAddr.fullName || user?.name || 'Valued Collector').trim();
+  const firstName = recipientName.split(' ')[0] || 'Collector';
+  const orderNumber = order.orderId || 'TCK-DELIVERED';
+  const deliveryDate = formatOrderDate(order.deliveredAt || new Date());
+  const currentYear = new Date().getFullYear();
+  const paymentMethodLabel = order.paymentMethod || 'Online Payment';
+  const paymentStatusText = order.paymentStatus === 'Paid' ? 'Paid (Verified)' : (order.paymentStatus || 'Paid');
+  const frontendUrl = (process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:3000').replace(/\/+$/, '');
+
+  const itemsHtml = (order.items || [])
+    .map((item) => {
+      const itemSubtotal = (Number(item.price) || 0) * (Number(item.quantity) || 1);
+      return `
+        <tr>
+          <td style="padding: 16px 0; border-bottom: 1px solid #1C1C24;">
+            <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0">
+              <tr>
+                <td valign="top" style="text-align: left;">
+                  <div style="font-size: 10px; font-weight: 700; color: #D4AF37; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 4px;">
+                    ${item.brand || 'Luxury Manufacture'}
+                  </div>
+                  <div style="font-family: Georgia, serif; font-size: 14px; font-weight: 700; color: #FFFFFF; line-height: 1.35; margin-bottom: 4px;">
+                    ${item.name}
+                  </div>
+                  <div style="font-size: 12px; color: #8A8A96;">
+                    Qty: <strong style="color: #E5E5E5;">${item.quantity}</strong> &times; ${formatCurrency(item.price)}
+                  </div>
+                </td>
+                <td width="120" valign="top" style="text-align: right;">
+                  <div style="font-family: Georgia, serif; font-size: 14px; font-weight: 700; color: #F3E5AB;">
+                    ${formatCurrency(itemSubtotal)}
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      `;
+    })
+    .join('');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Order Has Been Delivered #${orderNumber} | ${storeName}</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #08080A;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      color: #E5E5E5;
+      -webkit-font-smoothing: antialiased;
+    }
+    table {
+      border-collapse: collapse;
+    }
+    a {
+      color: #D4AF37;
+      text-decoration: none;
+    }
+    @media only screen and (max-width: 600px) {
+      .container {
+        width: 100% !important;
+        padding: 8px !important;
+      }
+      .content-padding {
+        padding: 24px 18px !important;
+      }
+      .col-half {
+        display: block !important;
+        width: 100% !important;
+        margin-bottom: 14px !important;
+      }
+      .column-pill {
+        display: block !important;
+        width: 100% !important;
+        margin-bottom: 12px !important;
+        border-left: none !important;
+        border-right: none !important;
+        border-bottom: 1px solid #1F1F2A !important;
+        padding-bottom: 12px !important;
+      }
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #08080A; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #E5E5E5;">
+  <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color: #08080A; padding: 36px 12px;">
+    <tr>
+      <td align="center">
+        <!-- Main Card Container -->
+        <table role="presentation" class="container" width="100%" border="0" cellpadding="0" cellspacing="0" style="max-width: 620px; background-color: #0F0F13; border: 1px solid #2A261A; border-radius: 16px; overflow: hidden; box-shadow: 0 12px 48px rgba(0,0,0,0.9);">
+          
+          <!-- Top Gold Accent Line -->
+          <tr>
+            <td style="height: 4px; background: linear-gradient(90deg, #996515 0%, #D4AF37 50%, #F3E5AB 100%);"></td>
+          </tr>
+
+          <!-- Header / Brand Emblem -->
+          <tr>
+            <td align="center" style="padding: 34px 28px 22px 28px; border-bottom: 1px solid #1C1C24;">
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <div style="display: inline-block; width: 44px; height: 44px; line-height: 44px; border: 1.5px solid #D4AF37; background: #000000; text-align: center; margin-bottom: 12px;">
+                      <span style="font-family: Georgia, serif; font-size: 22px; font-weight: bold; color: #D4AF37; letter-spacing: 2px;">T</span>
+                    </div>
+                    <div style="font-family: Georgia, serif; font-size: 22px; font-weight: 700; letter-spacing: 0.35em; color: #F3E5AB; text-transform: uppercase;">
+                      T I C K I N G
+                    </div>
+                    <div style="font-size: 9px; letter-spacing: 0.3em; color: #8A8A93; text-transform: uppercase; margin-top: 5px;">
+                      Haute Horlogerie &bull; Swiss Craftsmanship
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Main Content -->
+          <tr>
+            <td class="content-padding" style="padding: 34px 34px 24px 34px; text-align: left;">
+              
+              <!-- Delivery Confirmation Badge -->
+              <div style="display: inline-block; background-color: #064E3B; border: 1px solid #059669; border-radius: 50px; padding: 6px 14px; margin-bottom: 16px;">
+                <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.2em; color: #34D399; text-transform: uppercase;">
+                  &#10003; PACKAGE DELIVERED &bull; WHITE-GLOVE DISPATCH
+                </span>
+              </div>
+
+              <!-- Heading -->
+              <h1 style="font-family: Georgia, serif; font-size: 24px; line-height: 1.35; font-weight: 700; color: #FFFFFF; margin: 0 0 14px 0;">
+                Your Order Has Been Delivered, ${firstName}.
+              </h1>
+
+              <p style="font-size: 14px; line-height: 1.7; color: #C4C4CC; margin: 0 0 22px 0;">
+                We are pleased to confirm that your exquisite timepiece acquisition for Order <strong style="color: #F3E5AB;">#${orderNumber}</strong> has been successfully hand-delivered to your designated address by our private white-glove courier service. We trust that this masterwork brings you immense joy.
+              </p>
+
+              <!-- Delivery Overview Ledger -->
+              <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color: #14141A; border: 1px solid #262633; border-radius: 12px; margin-bottom: 26px;">
+                <tr>
+                  <td style="padding: 16px 20px;">
+                    <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td width="33%" style="text-align: left;">
+                          <div style="font-size: 9px; color: #7E7E8B; text-transform: uppercase; letter-spacing: 0.15em;">Order Reference</div>
+                          <div style="font-size: 12px; font-weight: 700; color: #F3E5AB; margin-top: 3px;">#${orderNumber}</div>
+                        </td>
+                        <td width="33%" style="text-align: left; padding: 0 10px;">
+                          <div style="font-size: 9px; color: #7E7E8B; text-transform: uppercase; letter-spacing: 0.15em;">Delivered On</div>
+                          <div style="font-size: 12px; font-weight: 600; color: #FFFFFF; margin-top: 3px;">${deliveryDate}</div>
+                        </td>
+                        <td width="33%" style="text-align: right;">
+                          <div style="font-size: 9px; color: #7E7E8B; text-transform: uppercase; letter-spacing: 0.15em;">Delivery Status</div>
+                          <div style="font-size: 11px; font-weight: 700; color: #10B981; margin-top: 3px; text-transform: uppercase;">
+                            Delivered
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Section: Delivered Timepieces -->
+              <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.2em; color: #D4AF37; text-transform: uppercase; margin-bottom: 12px; border-bottom: 1px solid #1C1C24; padding-bottom: 6px;">
+                Delivered Timepieces (${order.items?.length || 0})
+              </div>
+
+              <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+                ${itemsHtml}
+              </table>
+
+              <!-- Financial Summary Ledger -->
+              <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color: #14141A; border: 1px solid #262633; border-radius: 12px; margin-bottom: 26px;">
+                <tr>
+                  <td style="padding: 20px 24px;">
+                    <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="font-size: 13px; color: #A0A0AB; padding-bottom: 8px;">Subtotal</td>
+                        <td style="font-size: 13px; color: #FFFFFF; text-align: right; padding-bottom: 8px;">${formatCurrency(order.subtotal)}</td>
+                      </tr>
+                      ${
+                        order.discount > 0
+                          ? `
+                      <tr>
+                        <td style="font-size: 13px; color: #34D399; padding-bottom: 8px;">Privilege Discount ${order.couponCode ? `(${order.couponCode})` : ''}</td>
+                        <td style="font-size: 13px; color: #34D399; text-align: right; padding-bottom: 8px;">-${formatCurrency(order.discount)}</td>
+                      </tr>`
+                          : ''
+                      }
+                      <tr>
+                        <td style="font-size: 13px; color: #A0A0AB; padding-bottom: 8px;">White-Glove Insured Shipping</td>
+                        <td style="font-size: 13px; color: #F3E5AB; text-align: right; font-weight: 600; padding-bottom: 8px;">COMPLIMENTARY</td>
+                      </tr>
+                      <tr>
+                        <td style="font-size: 13px; color: #A0A0AB; padding-bottom: 14px;">Luxury Duty / VAT</td>
+                        <td style="font-size: 13px; color: #FFFFFF; text-align: right; padding-bottom: 14px;">${formatCurrency(order.tax)}</td>
+                      </tr>
+                      <tr>
+                        <td style="border-top: 1px solid #2A2A38; padding-top: 14px; font-size: 14px; font-weight: 700; color: #FFFFFF; text-transform: uppercase; letter-spacing: 0.1em;">
+                          Order Total
+                        </td>
+                        <td style="border-top: 1px solid #2A2A38; padding-top: 14px; font-family: Georgia, serif; font-size: 20px; font-weight: 700; color: #F3E5AB; text-align: right;">
+                          ${formatCurrency(order.grandTotal)}
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Two Column Customer & Payment Cards -->
+              <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 26px;">
+                <tr>
+                  <td class="col-half" width="48%" valign="top" style="background-color: #121217; border: 1px solid #262633; border-radius: 12px; padding: 18px 20px;">
+                    <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.18em; color: #D4AF37; text-transform: uppercase; margin-bottom: 10px;">
+                      Delivered To
+                    </div>
+                    <div style="font-size: 13px; font-weight: 700; color: #FFFFFF; margin-bottom: 4px;">
+                      ${shippingAddr.fullName || recipientName}
+                    </div>
+                    <div style="font-size: 12px; line-height: 1.6; color: #9A9AA4;">
+                      ${shippingAddr.address || ''}<br />
+                      ${shippingAddr.city || ''}, ${shippingAddr.state || ''} &bull; ${shippingAddr.pincode || ''}<br />
+                      <span style="color: #6C6C78;">Tel:</span> ${shippingAddr.phone || 'N/A'}
+                    </div>
+                  </td>
+
+                  <td width="4%" class="col-half">&nbsp;</td>
+
+                  <td class="col-half" width="48%" valign="top" style="background-color: #121217; border: 1px solid #262633; border-radius: 12px; padding: 18px 20px;">
+                    <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.18em; color: #D4AF37; text-transform: uppercase; margin-bottom: 10px;">
+                      Billing & Settlement
+                    </div>
+                    <div style="font-size: 13px; color: #FFFFFF; margin-bottom: 6px;">
+                      <span style="color: #7E7E8B;">Payment Method:</span> <strong>${paymentMethodLabel}</strong>
+                    </div>
+                    <div style="font-size: 13px; color: #FFFFFF; margin-bottom: 6px;">
+                      <span style="color: #7E7E8B;">Payment Status:</span> <strong style="color: #10B981;">${paymentStatusText}</strong>
+                    </div>
+                    <div style="font-size: 11px; color: #8A8A96; word-break: break-all;">
+                      <span style="color: #7E7E8B;">Order Ref:</span> #${orderNumber}
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Call to Action: View in Vault -->
+              <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 26px;">
+                <tr>
+                  <td align="center">
+                    <a href="${frontendUrl}/orders/${order._id || order.orderId}" target="_blank" style="display: inline-block; background: linear-gradient(90deg, #D4AF37 0%, #B8860B 100%); color: #000000; font-size: 12px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; text-decoration: none; padding: 15px 34px; border-radius: 50px; box-shadow: 0 4px 18px rgba(212, 175, 55, 0.35);">
+                      ACCESS YOUR HOROLOGICAL CERTIFICATE &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Post-Delivery Privileges / Warranty -->
+              <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="border-top: 1px solid #1C1C24; padding-top: 22px; margin-top: 8px;">
+                <tr>
+                  <td class="column-pill" width="33%" style="text-align: center; padding: 0 6px;">
+                    <div style="font-size: 10px; font-weight: 700; color: #F3E5AB; letter-spacing: 0.12em; text-transform: uppercase;">5-Year Warranty</div>
+                    <div style="font-size: 10px; color: #7E7E8B; margin-top: 4px;">Activated Upon Delivery</div>
+                  </td>
+                  <td class="column-pill" width="33%" style="text-align: center; padding: 0 6px; border-left: 1px solid #1F1F2A; border-right: 1px solid #1F1F2A;">
+                    <div style="font-size: 10px; font-weight: 700; color: #F3E5AB; letter-spacing: 0.12em; text-transform: uppercase;">Complimentary Sizing</div>
+                    <div style="font-size: 10px; color: #7E7E8B; margin-top: 4px;">At Any Partner Boutique</div>
+                  </td>
+                  <td class="column-pill" width="33%" style="text-align: center; padding: 0 6px;">
+                    <div style="font-size: 10px; font-weight: 700; color: #F3E5AB; letter-spacing: 0.12em; text-transform: uppercase;">Concierge Care</div>
+                    <div style="font-size: 10px; color: #7E7E8B; margin-top: 4px;">24/7 Collector Support</div>
+                  </td>
+                </tr>
+              </table>
+
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #070709; padding: 24px 34px; border-top: 1px solid #1C1C24; text-align: center;">
+              <p style="font-size: 11px; color: #7A7A84; line-height: 1.6; margin: 0 0 8px 0;">
+                If you have questions regarding warranty registration or sizing, contact our private concierge at <span style="color: #D4AF37;">${conciergeEmail}</span> or call <span style="color: #D4AF37;">${boutiquePhone}</span>.
+              </p>
+              <p style="font-size: 10px; color: #55555E; margin: 0;">
+                &copy; ${currentYear} ${storeName}. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+};
+
+/**
+ * Generates clean plain text alternative for order delivered email
+ */
+const generateOrderDeliveredText = (order, user = {}, settings = {}) => {
+  const { storeName, supportEmail: conciergeEmail, phone: boutiquePhone } = getSafeSettings(settings);
+  const shippingAddr = order.shippingAddress || {};
+  const recipientName = (shippingAddr.fullName || user?.name || 'Valued Collector').trim();
+  const firstName = recipientName.split(' ')[0] || 'Collector';
+  const orderNumber = order.orderId || 'TCK-DELIVERED';
+  const deliveryDate = formatOrderDate(order.deliveredAt || new Date());
+  const currentYear = new Date().getFullYear();
+  const paymentMethodLabel = order.paymentMethod || 'Online Payment';
+  const paymentStatusText = order.paymentStatus === 'Paid' ? 'Paid (Verified)' : (order.paymentStatus || 'Paid');
+
+  const itemsText = (order.items || [])
+    .map((item, idx) => `  ${idx + 1}. ${item.name} (${item.brand || 'Luxury Watch'})\n     Qty: ${item.quantity} | Unit Price: ${formatCurrency(item.price)} | Total: ${formatCurrency(item.price * item.quantity)}`)
+    .join('\n\n');
+
+  return `
+================================================================================
+                    T I C K I N G   L U X U R Y   W A T C H
+                     Haute Horlogerie - Swiss Craftsmanship
+================================================================================
+
+ORDER DELIVERED CONFIRMATION
+Order Reference: #${orderNumber}
+Delivery Status: DELIVERED
+Delivered On: ${deliveryDate}
+
+Dear ${firstName},
+
+We are pleased to confirm that your timepiece acquisition for Order #${orderNumber} has been successfully hand-delivered by our white-glove courier service.
+
+DELIVERED TIMEPIECES:
+--------------------------------------------------------------------------------
+${itemsText}
+--------------------------------------------------------------------------------
+
+ORDER SUMMARY:
+- Total Amount: ${formatCurrency(order.grandTotal)}
+- Payment Method: ${paymentMethodLabel}
+- Payment Status: ${paymentStatusText}
+
+DELIVERED TO:
+${shippingAddr.fullName || recipientName}
+${shippingAddr.address || ''}
+${shippingAddr.city || ''}, ${shippingAddr.state || ''} - ${shippingAddr.pincode || ''}
+Phone: ${shippingAddr.phone || 'N/A'}
+
+Your 5-Year Comprehensive Manufacture Warranty is active effective immediately.
+For concierge support or inquiries, please contact ${conciergeEmail} or call ${boutiquePhone}.
+
+(c) ${currentYear} ${storeName}. All rights reserved.
+`;
+};
+
+/**
+ * Sends an Order Delivered confirmation email via Brevo
+ */
+const sendOrderDeliveredEmail = async ({ order, user }) => {
+  if (!order) {
+    return { success: false, reason: 'No order provided' };
+  }
+
+  // 1. Idempotency check: Do not send duplicate delivery emails
+  if (order.deliveryEmailSent) {
+    console.log(`[Brevo Email] Delivery email already sent for #${order.orderId || order._id}. Skipping.`);
+    return {
+      success: true,
+      skipped: true,
+      reason: 'Order delivery email already dispatched previously'
+    };
+  }
+
+  // 2. Status check: Order must be Delivered
+  if (order.orderStatus !== 'Delivered') {
+    console.log(`[Brevo Email] Order #${order.orderId} status is not Delivered (${order.orderStatus}). Delivery email skipped.`);
+    return {
+      success: false,
+      skipped: true,
+      reason: 'Order status is not Delivered'
+    };
+  }
+
+  // 3. Resolve recipient email
+  const recipientEmail = (
+    order.shippingAddress?.email ||
+    user?.email ||
+    ''
+  ).toLowerCase().trim();
+
+  const recipientName = (
+    order.shippingAddress?.fullName ||
+    user?.name ||
+    'Valued Collector'
+  ).trim();
+
+  if (!recipientEmail) {
+    console.warn(`[Brevo Email] No valid recipient email address for order #${order.orderId || order._id}. Delivery email skipped.`);
+    return {
+      success: false,
+      skipped: true,
+      reason: 'No recipient email address found'
+    };
+  }
+
+  // 4. Retrieve store settings safely
+  let settings = null;
+  try {
+    const mongoose = require('mongoose');
+    if (mongoose.connection && mongoose.connection.readyState === 1) {
+      settings = await Settings.getSingleton();
+    }
+  } catch (err) {
+    console.warn('[Brevo Email] Could not fetch settings, using defaults:', err.message);
+  }
+
+  const { storeName } = getSafeSettings(settings);
+  const apiKey = (process.env.BREVO_API_KEY || '').trim();
+  const senderEmail = (process.env.BREVO_SENDER_EMAIL || '').trim();
+  const senderName = (process.env.BREVO_SENDER_NAME || storeName).trim();
+
+  if (!apiKey || !senderEmail) {
+    console.warn(
+      `[Brevo Email] Configuration notice: BREVO_API_KEY or BREVO_SENDER_EMAIL is not set in backend/.env. Order #${order.orderId} delivery email skipped.`
+    );
+    return {
+      success: false,
+      skipped: true,
+      reason: 'Brevo credentials not configured in backend/.env'
+    };
+  }
+
+  try {
+    const client = new BrevoClient({ apiKey });
+
+    const payload = {
+      subject: `Your Order Has Been Delivered – TICKING LUXARY WATCH (#${order.orderId || ''})`,
+      sender: {
+        name: senderName,
+        email: senderEmail
+      },
+      to: [
+        {
+          email: recipientEmail,
+          name: recipientName
+        }
+      ],
+      htmlContent: generateOrderDeliveredHtml(order, user, settings),
+      textContent: generateOrderDeliveredText(order, user, settings)
+    };
+
+    const response = await client.transactionalEmails.sendTransacEmail(payload);
+
+    console.log(
+      `[Brevo Email] Order delivered email sent for #${order.orderId} to ${recipientEmail} (Message ID: ${response?.messageId || 'dispatched'})`
+    );
+
+    // Atomically persist deliveryEmailSent flag in MongoDB Atlas
+    try {
+      const Order = require('../models/Order');
+      await Order.findByIdAndUpdate(order._id, {
+        $set: {
+          deliveryEmailSent: true,
+          deliveryEmailSentAt: new Date()
+        }
+      });
+      order.deliveryEmailSent = true;
+      order.deliveryEmailSentAt = new Date();
+    } catch (saveErr) {
+      console.warn('[Brevo Email] Could not persist deliveryEmailSent status:', saveErr.message);
+    }
+
+    return {
+      success: true,
+      messageId: response?.messageId
+    };
+  } catch (error) {
+    const errorMessage =
+      error?.response?.body?.message ||
+      error?.body?.message ||
+      error?.message ||
+      'Unknown error during Brevo API request';
+    const statusCode = error?.statusCode || error?.status || 'N/A';
+
+    console.error(
+      `[Brevo Email] Delivery email failed for #${order.orderId} (${recipientEmail}) [Status: ${statusCode}]: ${errorMessage}`
+    );
+
+    return {
+      success: false,
+      error: errorMessage
+    };
+  }
+};
+
 module.exports = {
   sendRegistrationWelcomeEmail,
   sendOrderConfirmationEmail,
+  sendPaymentSuccessEmail,
+  sendOrderDeliveredEmail,
   sendAccountDeletedEmail,
   sendPasswordResetOtpEmail,
   sendPasswordResetSuccessEmail,
@@ -1489,6 +2552,10 @@ module.exports = {
   generateWelcomeText,
   generateOrderConfirmationHtml,
   generateOrderConfirmationText,
+  generatePaymentSuccessHtml,
+  generatePaymentSuccessText,
+  generateOrderDeliveredHtml,
+  generateOrderDeliveredText,
   generateAccountDeletedHtml,
   generateAccountDeletedText,
   generatePasswordResetOtpHtml,

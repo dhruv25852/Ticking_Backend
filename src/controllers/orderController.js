@@ -1,7 +1,7 @@
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 const Cart = require('../models/Cart');
-const { sendOrderConfirmationEmail } = require('../services/emailService');
+const { sendOrderConfirmationEmail, sendOrderDeliveredEmail } = require('../services/emailService');
 
 // @desc    Create new order
 // @route   POST /api/orders
@@ -197,15 +197,28 @@ const updateOrderStatus = async (req, res) => {
     }
 
     const wasPaymentPending = order.paymentStatus !== 'Paid';
+    const previousOrderStatus = order.orderStatus;
 
-    if (orderStatus) order.orderStatus = orderStatus;
+    if (orderStatus) {
+      order.orderStatus = orderStatus;
+      if (orderStatus === 'Delivered' && !order.deliveredAt) {
+        order.deliveredAt = new Date();
+      }
+    }
     if (paymentStatus) order.paymentStatus = paymentStatus;
     if (trackingNumber) order.trackingNumber = trackingNumber;
 
     const updated = await order.save();
 
-    // If payment status transitioned to 'Paid' and confirmation email hasn't been sent yet, trigger it
-    if (wasPaymentPending && updated.paymentStatus === 'Paid' && !updated.confirmationEmailSent) {
+    // 1. Trigger Order Delivered email only when transitioning to Delivered for the first time
+    if (orderStatus === 'Delivered' && previousOrderStatus !== 'Delivered' && !updated.deliveryEmailSent) {
+      sendOrderDeliveredEmail({ order: updated, user: updated.user }).catch((emailErr) => {
+        console.error('[Brevo Email] Delivery notification dispatch failed for order:', updated.orderId, emailErr.message);
+      });
+    }
+
+    // 2. If payment status transitioned to 'Paid' and confirmation email hasn't been sent yet, trigger it
+    if (wasPaymentPending && updated.paymentStatus === 'Paid' && !updated.confirmationEmailSent && !updated.paymentSuccessEmailSent) {
       sendOrderConfirmationEmail({ order: updated, user: updated.user }).catch((emailErr) => {
         console.error('[Brevo Email] Triggered order confirmation email dispatch error:', emailErr.message);
       });
