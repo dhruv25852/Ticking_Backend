@@ -1,7 +1,13 @@
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Order = require('../models/Order');
-const { sendRegistrationWelcomeEmail, sendAccountDeletedEmail } = require('../services/emailService');
+const {
+  sendRegistrationWelcomeEmail,
+  sendAccountDeletedEmail,
+  sendPasswordResetOtpEmail,
+  sendPasswordResetSuccessEmail
+} = require('../services/emailService');
 const {
   isCloudinaryConfigured,
   uploadStreamToCloudinary,
@@ -30,6 +36,11 @@ const registerUser = async (req, res) => {
 
     const userExists = await User.findOne({ email: email.toLowerCase() });
     if (userExists) {
+      if (userExists.isActive === false || userExists.deletedAt) {
+        return res.status(400).json({
+          message: 'An account with this email was deactivated. Please contact TICKING concierge for assistance.'
+        });
+      }
       return res.status(400).json({ message: 'User already exists with this email' });
     }
 
@@ -80,13 +91,17 @@ const loginUser = async (req, res) => {
 
     const user = await User.findOne({ email: email.toLowerCase() });
 
-    if (user && (await user.matchPassword(password))) {
-      if (user.isActive === false) {
-        return res.status(403).json({
-          message: 'This account has been deactivated. Please contact TICKING concierge for assistance.'
-        });
-      }
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
 
+    if (user.isActive === false || user.deletedAt) {
+      return res.status(403).json({
+        message: 'This account has been deactivated. Please contact TICKING concierge for assistance.'
+      });
+    }
+
+    if (await user.matchPassword(password)) {
       res.json({
         _id: user._id,
         name: user.name,
@@ -442,9 +457,21 @@ const deleteAccount = async (req, res) => {
       console.warn('[Account Deletion] Notice during cart/wishlist cleanup:', cleanErr.message);
     }
 
-    // 7. Delete the user document securely from MongoDB Atlas
-    // Historical order records in the Order collection are preserved for business, tax, and warranty compliance
-    await User.findByIdAndDelete(userId);
+    // 7. Soft-delete / deactivate the user account in MongoDB Atlas
+    // Retains the customer profile information in MongoDB Atlas so the Admin Dashboard
+    // displays 'Deactivated' status, while disabling future logins and preserving historical orders and payments.
+    await User.findByIdAndUpdate(userId, {
+      $set: {
+        isActive: false,
+        deletedAt: deletionDate,
+        avatar: '',
+        avatarPublicId: '',
+        resetPasswordOtpHash: null,
+        resetPasswordOtpExpires: null,
+        resetPasswordSessionToken: null,
+        resetPasswordSessionExpires: null
+      }
+    });
 
     // 8. Send Account Deleted confirmation email via Brevo
     try {
@@ -564,11 +591,233 @@ const logoutUser = async (req, res) => {
   res.json({ success: true, message: 'Logged out successfully' });
 };
 
+// @desc    Initiate forgot password: generate 6-digit OTP and send via Brevo
+// @route   POST /api/auth/forgot-password
+// @access  Public
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ message: 'Please provide a valid email address' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Find active user
+    const user = await User.findOne({
+      email: normalizedEmail,
+      isActive: true,
+      deletedAt: null
+    });
+
+    // Security requirement: Do not reveal whether an email address is registered; show a generic response.
+    const genericResponse = {
+      success: true,
+      message: 'If an account exists with this email address, a 6-digit verification code has been dispatched.',
+      expiresInSeconds: 300
+    };
+
+    if (!user) {
+      return res.status(200).json(genericResponse);
+    }
+
+    // Cooldown check: prevent repeated abuse requests within 60 seconds
+    if (user.resetPasswordCooldown && user.resetPasswordCooldown.getTime() > Date.now()) {
+      const secondsLeft = Math.ceil((user.resetPasswordCooldown.getTime() - Date.now()) / 1000);
+      return res.status(429).json({
+        message: `Please wait ${secondsLeft} seconds before requesting another verification code.`,
+        cooldownSeconds: secondsLeft
+      });
+    }
+
+    // Generate cryptographically random 6-digit code
+    const otpCode = crypto.randomInt(100000, 999999).toString();
+
+    // Hash OTP with SHA-256 for secure database storage
+    const otpHash = crypto.createHash('sha256').update(otpCode).digest('hex');
+
+    user.resetPasswordOtpHash = otpHash;
+    user.resetPasswordOtpExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes expiration
+    user.resetPasswordOtpAttempts = 0;
+    user.resetPasswordCooldown = new Date(Date.now() + 60 * 1000); // 60 seconds cooldown
+    user.resetPasswordSessionToken = null;
+    user.resetPasswordSessionExpires = null;
+    await user.save();
+
+    // Asynchronously dispatch luxury verification email via Brevo
+    sendPasswordResetOtpEmail({
+      name: user.name,
+      email: user.email,
+      otpCode,
+      expiresInMinutes: 5
+    }).catch((emailErr) => {
+      console.error('[Brevo Email] Error dispatching password reset verification code:', emailErr?.message);
+    });
+
+    res.status(200).json(genericResponse);
+  } catch (error) {
+    console.error('[Forgot Password Error]:', error.message);
+    res.status(500).json({ message: 'Server error processing password reset request' });
+  }
+};
+
+// @desc    Verify 6-digit reset code and issue short-lived reset authorization token
+// @route   POST /api/auth/verify-reset-code
+// @access  Public
+const verifyResetCode = async (req, res) => {
+  try {
+    const { email, code } = req.body;
+
+    if (!email || !code) {
+      return res.status(400).json({ message: 'Please provide both email address and verification code' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const cleanCode = code.toString().trim();
+
+    if (!/^\d{6}$/.test(cleanCode)) {
+      return res.status(400).json({ message: 'Verification code must be exactly 6 digits' });
+    }
+
+    const user = await User.findOne({
+      email: normalizedEmail,
+      isActive: true,
+      deletedAt: null
+    });
+
+    if (!user || !user.resetPasswordOtpHash || !user.resetPasswordOtpExpires) {
+      return res.status(400).json({ message: 'Invalid or expired verification code. Please request a new one.' });
+    }
+
+    // Check expiration (5 minutes)
+    if (Date.now() > new Date(user.resetPasswordOtpExpires).getTime()) {
+      user.resetPasswordOtpHash = null;
+      user.resetPasswordOtpExpires = null;
+      user.resetPasswordOtpAttempts = 0;
+      await user.save();
+      return res.status(400).json({ message: 'Verification code has expired (valid for 5 minutes). Please request a new one.' });
+    }
+
+    // Check attempt limit (max 5 attempts)
+    if (user.resetPasswordOtpAttempts >= 5) {
+      user.resetPasswordOtpHash = null;
+      user.resetPasswordOtpExpires = null;
+      user.resetPasswordOtpAttempts = 0;
+      await user.save();
+      return res.status(429).json({ message: 'Maximum verification attempts exceeded. Please request a new verification code.' });
+    }
+
+    // Verify cryptographic SHA-256 hash match
+    const candidateHash = crypto.createHash('sha256').update(cleanCode).digest('hex');
+
+    if (candidateHash !== user.resetPasswordOtpHash) {
+      user.resetPasswordOtpAttempts = (user.resetPasswordOtpAttempts || 0) + 1;
+      const remainingAttempts = 5 - user.resetPasswordOtpAttempts;
+      await user.save();
+
+      return res.status(400).json({
+        message: `Incorrect verification code. ${remainingAttempts > 0 ? `${remainingAttempts} attempt(s) remaining.` : 'Code has been invalidated.'}`
+      });
+    }
+
+    // OTP match succeeded: invalidate OTP immediately to prevent replay
+    user.resetPasswordOtpHash = null;
+    user.resetPasswordOtpExpires = null;
+    user.resetPasswordOtpAttempts = 0;
+
+    // Issue short-lived, cryptographically secure reset authorization session token (valid for 10 minutes)
+    const rawResetToken = crypto.randomBytes(32).toString('hex');
+    user.resetPasswordSessionToken = crypto.createHash('sha256').update(rawResetToken).digest('hex');
+    user.resetPasswordSessionExpires = new Date(Date.now() + 10 * 60 * 1000);
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Verification code confirmed successfully.',
+      resetToken: rawResetToken
+    });
+  } catch (error) {
+    console.error('[Verify Reset Code Error]:', error.message);
+    res.status(500).json({ message: 'Server error verifying reset code' });
+  }
+};
+
+// @desc    Update password using verified reset authorization token
+// @route   POST /api/auth/reset-password
+// @access  Public
+const resetPassword = async (req, res) => {
+  try {
+    const { email, resetToken, newPassword, confirmPassword } = req.body;
+
+    if (!email || !resetToken || !newPassword) {
+      return res.status(400).json({ message: 'Please provide email, authorization token, and new password' });
+    }
+
+    if (confirmPassword && newPassword !== confirmPassword) {
+      return res.status(400).json({ message: 'New password and confirm password do not match' });
+    }
+
+    if (typeof newPassword !== 'string' || newPassword.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters in length' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const user = await User.findOne({
+      email: normalizedEmail,
+      isActive: true,
+      deletedAt: null
+    });
+
+    if (!user || !user.resetPasswordSessionToken || !user.resetPasswordSessionExpires) {
+      return res.status(400).json({ message: 'Invalid or expired password reset session. Please request a new verification code.' });
+    }
+
+    // Check reset session expiration (10 minutes)
+    if (Date.now() > new Date(user.resetPasswordSessionExpires).getTime()) {
+      user.resetPasswordSessionToken = null;
+      user.resetPasswordSessionExpires = null;
+      await user.save();
+      return res.status(400).json({ message: 'Reset session expired. Please verify your code again.' });
+    }
+
+    // Verify hash of the provided reset session token
+    const candidateSessionHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+    if (candidateSessionHash !== user.resetPasswordSessionToken) {
+      return res.status(403).json({ message: 'Unauthorized reset request: verification token mismatch' });
+    }
+
+    // Securely update password; Mongoose pre-save hook will hash it with bcrypt
+    user.password = newPassword;
+    user.resetPasswordSessionToken = null;
+    user.resetPasswordSessionExpires = null;
+    user.resetPasswordCooldown = null;
+    await user.save();
+
+    // Asynchronously dispatch password updated security alert via Brevo
+    sendPasswordResetSuccessEmail({ name: user.name, email: user.email }).catch((emailErr) => {
+      console.error('[Brevo Email] Error dispatching password update confirmation:', emailErr?.message);
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Your password has been updated successfully. You can now log in with your new password.'
+    });
+  } catch (error) {
+    console.error('[Reset Password Error]:', error.message);
+    res.status(500).json({ message: 'Server error updating password' });
+  }
+};
+
 module.exports = {
   registerUser,
   loginUser,
   adminLogin,
   logoutUser,
+  forgotPassword,
+  verifyResetCode,
+  resetPassword,
   getUserProfile,
   updateUserProfile: updateAccount,
   updateAccount,

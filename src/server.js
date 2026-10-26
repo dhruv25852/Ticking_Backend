@@ -113,4 +113,12 @@ const startServer = async () => {
   }
 };
 
+process.on('unhandledRejection', (reason) => {
+  console.error('[Process Notice] Unhandled Rejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[Process Notice] Uncaught Exception:', err.message);
+});
+
 startServer();

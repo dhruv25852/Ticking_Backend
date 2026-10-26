@@ -1201,14 +1201,296 @@ const sendAccountDeletedEmail = async ({ name, email, deletionDate }) => {
   }
 };
 
+/**
+ * Generates a luxury black-and-gold responsive HTML password reset OTP verification email
+ */
+const generatePasswordResetOtpHtml = (name, otpCode, expiresInMinutes = 5, settings = {}) => {
+  const { storeName, supportEmail: conciergeEmail, phone: boutiquePhone } = getSafeSettings(settings);
+  const firstName = (name || '').trim().split(' ')[0] || 'Valued Collector';
+  const currentYear = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Verification Code | ${storeName}</title>
+  <style>
+    body { margin: 0; padding: 0; background-color: #08080A; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #E5E5E5; -webkit-font-smoothing: antialiased; }
+    table { border-collapse: collapse; }
+    a { color: #D4AF37; text-decoration: none; }
+    @media only screen and (max-width: 600px) {
+      .container { width: 100% !important; padding: 10px !important; }
+      .content-padding { padding: 25px 20px !important; }
+      .otp-box { font-size: 32px !important; letter-spacing: 0.25em !important; }
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #08080A; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #E5E5E5;">
+  <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color: #08080A; padding: 40px 15px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" class="container" width="100%" border="0" cellpadding="0" cellspacing="0" style="max-width: 600px; background-color: #0F0F13; border: 1px solid #2A261A; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.85);">
+          <tr>
+            <td style="height: 4px; background: linear-gradient(90deg, #996515 0%, #D4AF37 50%, #F3E5AB 100%);"></td>
+          </tr>
+          <tr>
+            <td align="center" style="padding: 38px 30px 24px 30px; border-bottom: 1px solid #1C1C24;">
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <div style="display: inline-block; width: 44px; height: 44px; line-height: 44px; border: 1.5px solid #D4AF37; background: #000000; text-align: center; margin-bottom: 12px;">
+                      <span style="font-family: Georgia, serif; font-size: 22px; font-weight: bold; color: #D4AF37; letter-spacing: 2px;">T</span>
+                    </div>
+                    <div style="font-family: Georgia, serif; font-size: 22px; font-weight: 700; letter-spacing: 0.35em; color: #F3E5AB; text-transform: uppercase;">
+                      T I C K I N G
+                    </div>
+                    <div style="font-size: 9px; letter-spacing: 0.3em; color: #8A8A93; text-transform: uppercase; margin-top: 5px;">
+                      Haute Horlogerie &bull; Swiss Craftsmanship
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td class="content-padding" style="padding: 36px 36px 24px 36px; text-align: left;">
+              <div style="display: inline-block; padding: 4px 12px; background-color: rgba(212, 175, 55, 0.15); border: 1px solid rgba(212, 175, 55, 0.35); border-radius: 20px; font-size: 10px; font-weight: 700; letter-spacing: 0.2em; color: #D4AF37; text-transform: uppercase; margin-bottom: 14px;">
+                SECURITY VERIFICATION CODE
+              </div>
+              <h1 style="font-family: Georgia, serif; font-size: 24px; font-weight: 700; color: #FFFFFF; margin: 0 0 16px 0; letter-spacing: 0.02em;">
+                Reset Your Password
+              </h1>
+              <p style="font-size: 13px; line-height: 1.7; color: #B0B0B8; margin: 0 0 20px 0;">
+                Dear ${firstName}, we received a request to reset the password for your TICKING luxury account. Use the following 6-digit verification code to authenticate your request:
+              </p>
+              <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="margin: 28px 0;">
+                <tr>
+                  <td align="center" style="background: #08080A; border: 1.5px dashed #D4AF37; border-radius: 12px; padding: 26px 20px;">
+                    <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.25em; color: #D4AF37; text-transform: uppercase; margin-bottom: 8px;">
+                      YOUR 6-DIGIT VERIFICATION CODE
+                    </div>
+                    <div class="otp-box" style="font-family: 'Courier New', Courier, monospace; font-size: 40px; font-weight: 800; letter-spacing: 0.35em; color: #F3E5AB; text-shadow: 0 0 15px rgba(212, 175, 55, 0.4);">
+                      ${otpCode}
+                    </div>
+                    <div style="font-size: 11px; color: #8A8A93; margin-top: 10px;">
+                      Expires in <strong style="color: #F87171;">${expiresInMinutes} minutes</strong>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+              <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color: #14141A; border-left: 3px solid #D4AF37; border-radius: 4px; padding: 14px 18px; margin: 20px 0 25px 0;">
+                <tr>
+                  <td>
+                    <p style="font-size: 12px; line-height: 1.6; color: #D1D1D6; margin: 0;">
+                      <strong style="color: #F3E5AB;">Security Note:</strong> Never share this verification code with anyone. TICKING concierges will never ask you for your code. If you did not initiate this request, your account remains secure and no action is required.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+              <p style="font-size: 12px; line-height: 1.6; color: #8A8A93; margin: 0;">
+                Warm regards,<br>
+                <strong style="color: #D4AF37;">The TICKING Private Security & Concierge Team</strong>
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color: #0A0A0D; border-top: 1px solid #1C1C24; padding: 24px 30px; text-align: center;">
+              <p style="font-size: 11px; color: #6E6E78; margin: 0 0 8px 0;">
+                Need assistance? Contact our private desk:
+                <a href="mailto:${conciergeEmail}" style="color: #D4AF37;">${conciergeEmail}</a> &bull;
+                <a href="tel:${boutiquePhone}" style="color: #D4AF37;">${boutiquePhone}</a>
+              </p>
+              <p style="font-size: 10px; color: #505058; margin: 0;">
+                &copy; ${currentYear} ${storeName}. Geneva &bull; Paris &bull; London &bull; Mumbai. All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+};
+
+/**
+ * Plaintext fallback for password reset verification code email
+ */
+const generatePasswordResetOtpText = (name, otpCode, expiresInMinutes = 5, settings = {}) => {
+  const { storeName, supportEmail: conciergeEmail } = getSafeSettings(settings);
+  const firstName = (name || '').trim().split(' ')[0] || 'Valued Collector';
+  return `TICKING LUXURY WATCH - PASSWORD RESET CODE
+
+Dear ${firstName},
+
+Your 6-digit verification code to reset your account password is:
+
+${otpCode}
+
+This code will expire in ${expiresInMinutes} minutes.
+
+If you did not request this code, please disregard this email. Your account remains secure.
+
+Concierge Desk: ${conciergeEmail}
+(c) ${new Date().getFullYear()} ${storeName}. All rights reserved.`;
+};
+
+/**
+ * Dispatches the 6-digit password reset verification code via Brevo
+ */
+const sendPasswordResetOtpEmail = async ({ name, email, otpCode, expiresInMinutes = 5 }) => {
+  try {
+    const apiKey = (process.env.BREVO_API_KEY || '').trim();
+    const senderEmail = (process.env.BREVO_SENDER_EMAIL || '').trim();
+
+    if (!apiKey || !senderEmail) {
+      console.warn(
+        `[Brevo Email] BREVO_API_KEY or BREVO_SENDER_EMAIL is missing in backend/.env. Password reset email skipped for ${email}.`
+      );
+      return {
+        success: false,
+        skipped: true,
+        reason: 'Brevo API credentials missing'
+      };
+    }
+
+    let settings = null;
+    try {
+      const mongoose = require('mongoose');
+      if (mongoose.connection && mongoose.connection.readyState === 1) {
+        settings = await Settings.getSingleton();
+      }
+    } catch {
+      // defaults
+    }
+
+    const { storeName } = getSafeSettings(settings);
+    const senderName = (process.env.BREVO_SENDER_NAME || storeName).trim();
+
+    const client = new BrevoClient({ apiKey });
+
+    const payload = {
+      subject: `Your Verification Code: ${otpCode} | ${storeName}`,
+      sender: {
+        name: senderName,
+        email: senderEmail
+      },
+      to: [
+        {
+          email: email.toLowerCase().trim(),
+          name: name || 'Valued Collector'
+        }
+      ],
+      htmlContent: generatePasswordResetOtpHtml(name, otpCode, expiresInMinutes, settings),
+      textContent: generatePasswordResetOtpText(name, otpCode, expiresInMinutes, settings)
+    };
+
+    const response = await client.transactionalEmails.sendTransacEmail(payload);
+
+    console.log(
+      `[Brevo Email] Password reset verification code successfully sent to ${email} (Message ID: ${response?.messageId || 'dispatched'})`
+    );
+
+    return {
+      success: true,
+      messageId: response?.messageId
+    };
+  } catch (error) {
+    const errorMessage =
+      error?.response?.body?.message ||
+      error?.body?.message ||
+      error?.message ||
+      'Unknown error during Brevo API request';
+    console.error(`[Brevo Email] Password reset code email delivery failed for ${email}: ${errorMessage}`);
+    return {
+      success: false,
+      error: errorMessage
+    };
+  }
+};
+
+/**
+ * Dispatches a notification email confirming password reset
+ */
+const sendPasswordResetSuccessEmail = async ({ name, email }) => {
+  try {
+    const apiKey = (process.env.BREVO_API_KEY || '').trim();
+    const senderEmail = (process.env.BREVO_SENDER_EMAIL || '').trim();
+
+    if (!apiKey || !senderEmail) {
+      return { success: false, skipped: true };
+    }
+
+    let settings = null;
+    try {
+      const mongoose = require('mongoose');
+      if (mongoose.connection && mongoose.connection.readyState === 1) {
+        settings = await Settings.getSingleton();
+      }
+    } catch {
+      // defaults
+    }
+
+    const { storeName, supportEmail: conciergeEmail } = getSafeSettings(settings);
+    const senderName = (process.env.BREVO_SENDER_NAME || storeName).trim();
+    const firstName = (name || '').trim().split(' ')[0] || 'Valued Collector';
+
+    const client = new BrevoClient({ apiKey });
+
+    const htmlContent = `<!DOCTYPE html>
+<html>
+<body style="margin: 0; padding: 0; background-color: #08080A; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #E5E5E5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding: 40px 15px;">
+    <tr>
+      <td align="center">
+        <table width="100%" style="max-width: 600px; background-color: #0F0F13; border: 1px solid #2A261A; border-radius: 16px; overflow: hidden;">
+          <tr><td style="height: 4px; background: linear-gradient(90deg, #996515 0%, #D4AF37 50%, #F3E5AB 100%);"></td></tr>
+          <tr>
+            <td style="padding: 36px;">
+              <h2 style="font-family: Georgia, serif; color: #FFFFFF; margin-top: 0;">Password Updated Successfully</h2>
+              <p style="font-size: 13px; color: #B0B0B8; line-height: 1.7;">
+                Dear ${firstName}, the password for your TICKING luxury account has been successfully updated.
+              </p>
+              <p style="font-size: 12px; color: #8A8A93; line-height: 1.6;">
+                If you did not authorize this change, please contact our private concierge immediately at <a href="mailto:${conciergeEmail}" style="color: #D4AF37;">${conciergeEmail}</a>.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    await client.transactionalEmails.sendTransacEmail({
+      subject: `Security Alert: Password Updated Successfully | ${storeName}`,
+      sender: { name: senderName, email: senderEmail },
+      to: [{ email: email.toLowerCase().trim(), name: name || 'Valued Collector' }],
+      htmlContent,
+      textContent: `Your TICKING account password has been updated successfully. If you did not make this change, please contact ${conciergeEmail} immediately.`
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error(`[Brevo Email] Password reset confirmation notice delivery error for ${email}:`, error.message);
+    return { success: false, error: error.message };
+  }
+};
+
 module.exports = {
   sendRegistrationWelcomeEmail,
   sendOrderConfirmationEmail,
   sendAccountDeletedEmail,
+  sendPasswordResetOtpEmail,
+  sendPasswordResetSuccessEmail,
   generateWelcomeHtml,
   generateWelcomeText,
   generateOrderConfirmationHtml,
   generateOrderConfirmationText,
   generateAccountDeletedHtml,
-  generateAccountDeletedText
+  generateAccountDeletedText,
+  generatePasswordResetOtpHtml,
+  generatePasswordResetOtpText
 };

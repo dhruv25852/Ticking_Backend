@@ -107,7 +107,11 @@ const createRazorpayOrder = async (req, res) => {
     });
   } catch (error) {
     console.error('[Razorpay Create Order Error]:', error);
-    res.status(500).json({ message: error.error?.description || error.message || 'Failed to initiate Razorpay order' });
+    let errorMessage = error.error?.description || error.message || 'Failed to initiate Razorpay order';
+    if (errorMessage.toLowerCase().includes('amount exceeds maximum')) {
+      errorMessage = 'This acquisition amount exceeds your standard Razorpay transaction limit (typically ₹5,00,000). For high-value timepieces, please select Cash on Delivery or request a higher transaction limit in your Razorpay Dashboard.';
+    }
+    res.status(400).json({ message: errorMessage });
   }
 };
 

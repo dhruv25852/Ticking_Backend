@@ -7,7 +7,8 @@ const connectDB = async () => {
     }
 
     const connection = await mongoose.connect(process.env.MONGODB_URI, {
-      dbName: 'ticking'
+      dbName: 'ticking',
+      serverSelectionTimeoutMS: 20000
     });
 
     console.log(

@@ -55,7 +55,31 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null
     },
-    addresses: [addressSchema]
+    addresses: [addressSchema],
+    resetPasswordOtpHash: {
+      type: String,
+      default: null
+    },
+    resetPasswordOtpExpires: {
+      type: Date,
+      default: null
+    },
+    resetPasswordOtpAttempts: {
+      type: Number,
+      default: 0
+    },
+    resetPasswordCooldown: {
+      type: Date,
+      default: null
+    },
+    resetPasswordSessionToken: {
+      type: String,
+      default: null
+    },
+    resetPasswordSessionExpires: {
+      type: Date,
+      default: null
+    }
   },
   { timestamps: true }
 );

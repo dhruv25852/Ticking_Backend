@@ -98,15 +98,23 @@ const getAllCustomers = async (req, res) => {
       .select('-password')
       .sort({ createdAt: -1 });
 
-    // Aggregate orders count per customer
+    // Aggregate orders count and total expenditure per customer (preserving all historical records)
     const customersWithOrders = await Promise.all(
       customers.map(async (cust) => {
-        const orderCount = await Order.countDocuments({ user: cust._id });
-        const orders = await Order.find({ user: cust._id, orderStatus: { $ne: 'Cancelled' } });
-        const totalSpent = orders.reduce((acc, curr) => acc + curr.grandTotal, 0);
+        const orders = await Order.find({
+          $or: [
+            { user: cust._id },
+            { 'shippingAddress.email': cust.email.toLowerCase() }
+          ],
+          orderStatus: { $ne: 'Cancelled' }
+        });
+        const totalSpent = orders.reduce(
+          (acc, curr) => acc + (curr.grandTotal || curr.totalAmount || curr.subtotal || 0),
+          0
+        );
         return {
           ...cust.toObject(),
-          totalOrders: orderCount,
+          totalOrders: orders.length,
           totalSpent
         };
       })

@@ -6,6 +6,9 @@ const {
   loginUser,
   adminLogin,
   logoutUser,
+  forgotPassword,
+  verifyResetCode,
+  resetPassword,
   getUserProfile,
   updateAccount,
   changePassword,
@@ -36,6 +39,11 @@ router.post('/register', authLimiter, registerUser);
 router.post('/login', authLimiter, loginUser);
 router.post('/admin/login', authLimiter, adminLogin);
 router.post('/logout', logoutUser);
+
+// Password reset workflow with Brevo verification (Public)
+router.post('/forgot-password', authLimiter, forgotPassword);
+router.post('/verify-reset-code', authLimiter, verifyResetCode);
+router.post('/reset-password', authLimiter, resetPassword);
 
 // Customer account routes (Private)
 router.route('/profile').get(protect, getUserProfile).put(protect, updateAccount);
